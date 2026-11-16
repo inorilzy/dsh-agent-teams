@@ -2,6 +2,11 @@
 
 版本号以 `package.json` 为准。条目整理自 Git 提交记录。
 
+## 0.18.2
+
+- 看板头像先按模型名识别厂商，模型名认不出时才看 provider 名。之前 provider 名在前面的厂商先命中，网关 provider（如 `magpie-anthropic`）下的 Gemini 模型（如 `agy-cli/gemini-4-hydrogen`）会显示 Claude 图标。
+- 工单头像优先使用快照里单独给出的 provider 和模型；没有时把 `provider/model` 在第一个 `/` 处拆开。
+
 ## 0.18.1
 
 修复 0.17.0、0.18.0 审查（三个模型各审一遍，再逐条核实）确认的问题：

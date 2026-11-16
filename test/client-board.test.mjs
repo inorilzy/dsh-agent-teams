@@ -1327,9 +1327,30 @@ test('vendor recognition covers the main model families and falls back to a gene
       ['google', 'gemini-2.5-pro'],
       ['openai', 'gpt-5'],
       ['local', 'llama-3'],
+      ['magpie-anthropic', 'agy-cli/gemini-4-hydrogen'],
+      ['magpie-anthropic', 'devin/swe-2'],
     ].map(([p, m]) => vendorFor(p, m)),
-    ['deepseek', 'grok', 'gemini', 'gpt', 'generic'],
+    ['deepseek', 'grok', 'gemini', 'gpt', 'generic', 'gemini', 'claude'],
   )
+})
+
+test('a ticket on a gateway provider named after one vendor shows the vendor its model names', () => {
+  const root = boardFor([
+    {
+      id: 'routed',
+      status: 'RUNNING',
+      model: 'magpie-anthropic/agy-cli/gemini-4-hydrogen',
+      route: { provider: 'magpie-anthropic', model: 'agy-cli/gemini-4-hydrogen', reasoningEffort: '' },
+    },
+    { id: 'legacy', status: 'PENDING', model: 'magpie-anthropic/agy-cli/gemini-4-carbon' },
+  ])
+  for (const id of ['routed', 'legacy']) {
+    const avatar = find(
+      find(root, (n) => n.props['data-dag-ticket'] === id),
+      (n) => n.props['data-dag-avatar'] !== undefined,
+    )
+    assert.equal(avatar.props['data-dag-avatar'], 'gemini', id + ' is Gemini, not Claude')
+  }
 })
 
 test('a recognised vendor avatar shows that vendor icon and no abbreviation tag; an unknown model keeps the ? figure', () => {

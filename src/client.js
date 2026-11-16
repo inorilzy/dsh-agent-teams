@@ -1075,8 +1075,16 @@ window.__ModuleLoader__.load({
       ticket.childId &&
       button('查看对话', () => open(ticket.childId), { title: '打开这个工单子会话的对话记录', ...extra })
 
-    // A ticket row knows its model as "provider/model"; the vendor match reads the whole string.
-    const ticketRoute = (ticket, captain) => (ticket.model ? { model: ticket.model } : captain)
+    // A ticket row carries its route, and its model as "provider/model"; a row
+    // without the route splits that string at the first slash.
+    const ticketRoute = (ticket, captain) => {
+      if (ticket.route?.model) return ticket.route
+      if (!ticket.model) return captain
+      const slash = ticket.model.indexOf('/')
+      return slash < 0
+        ? { model: ticket.model }
+        : { provider: ticket.model.slice(0, slash), model: ticket.model.slice(slash + 1) }
+    }
 
     // A member's name in its own colour; ID-free like the plan review.
     const memberTag = (member) =>
@@ -1803,8 +1811,9 @@ window.__ModuleLoader__.load({
       return (overlaps ?? []).map((o) => o.tickets.join(' 与 ') + '：' + o.files.join('、'))
     }
 
-    // Vendor of a model route, recognised from the provider and model names.
-    // Order matters: a routed name such as magpie/auto/claude-opus resolves by its model.
+    // Vendor of a model route, recognised by its model name first and its provider
+    // name only when the model names no vendor: a gateway provider such as
+    // magpie-anthropic serving agy-cli/gemini-4 is Gemini, not Claude.
     const vendors = [
       ['deepseek', 'DeepSeek', /deepseek/, '#4d6bfe', 'DS'],
       ['claude', 'Claude', /claude|anthropic/, '#d97757', 'C'],
@@ -1817,8 +1826,9 @@ window.__ModuleLoader__.load({
     ]
     const genericVendor = ['generic', '通用模型', null, '#6b7280', '?']
     function vendorOf(provider, model) {
-      const name = ((model || '') + ' ' + (provider || '')).toLowerCase()
-      return (model && vendors.find(([, , pattern]) => pattern.test(name))) || genericVendor
+      if (!model) return genericVendor
+      const match = (name) => vendors.find(([, , pattern]) => pattern.test(name.toLowerCase()))
+      return match(model) || match(provider || '') || genericVendor
     }
 
     // Official vendor icons from lobehub/lobe-icons (MIT, @lobehub/icons-static-svg@1.102.0),
