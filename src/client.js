@@ -83,7 +83,7 @@ window.__ModuleLoader__.load({
         name: '验收员',
         description: '验收员（建议普通模型）：运行真实宿主、浏览器和 SDK 验收，如实记录结果',
         instructions:
-          'Run the acceptance the ticket names against real hosts, browsers or SDKs. Mark each acceptance item VERIFIED, PARTIAL, MISSING or NOT RUN with the exact command and its output; run every command yourself instead of trusting an earlier report. A missing environment is NOT RUN, never VERIFIED; wording such as should, probably or seems is not evidence. You may fix test fixtures and harnesses, not production code; report defects instead of fixing them. Commit the acceptance record.',
+          'Run the acceptance the ticket names against real hosts, browsers or SDKs. Verify the current host OS first; for other target OS platforms not present here, run platform-independent checks, mark platform-specific items NOT RUN (deferred: <OS>), and list follow-up verification steps. For UI or interactive changes, capture screenshots of the live state, inspect every screenshot directly with read_image to confirm layout, alignment, copy and data, and record the screenshot paths. Mark each acceptance item VERIFIED, PARTIAL, MISSING or NOT RUN with the exact command and its output; run every command yourself instead of trusting an earlier report. A missing environment is NOT RUN, never VERIFIED; wording such as should, probably or seems is not evidence. You may fix test fixtures and harnesses, not production code; report defects instead of fixing them. Commit the acceptance record.',
         provider: '',
         model: '',
         reasoningEffort: '',
@@ -1731,13 +1731,30 @@ window.__ModuleLoader__.load({
       ])
     }
 
-    // "已清理 N 张 / 跳过 M 张（原因）", or null before any cleanup result.
+    // "已清理 N 张 / 跳过 M 张（原因类别：工单…）", or null before any cleanup result.
+    // Only the reason's category is shown here: full reasons carry file lists and
+    // paths, and one per ticket floods the overview. Each ticket's cleanup step keeps it.
     function cleanupSummary(tickets) {
       const cleaned = tickets.filter((t) => t.cleanup === 'cleaned').length
       const skipped = tickets.filter((t) => t.cleanup === 'skipped')
       if (!cleaned && !skipped.length) return null
-      const reasons = skipped.map((t) => t.id + '：' + (t.cleanupReason || '未说明')).join('；')
-      return '已清理 ' + cleaned + ' 张 / 跳过 ' + skipped.length + ' 张' + (reasons ? '（' + reasons + '）' : '')
+      const groups = new Map()
+      for (const t of skipped) {
+        const kind = (t.cleanupReason || '未说明').split(/ \(|: /)[0].slice(0, 80)
+        groups.set(kind, [...(groups.get(kind) ?? []), t.id])
+      }
+      const shown = 6
+      const reasons = [...groups]
+        .map(([kind, ids]) => kind + '：' + ids.slice(0, shown).join('、') + (ids.length > shown ? ' 等 ' + ids.length + ' 张' : ''))
+        .join('；')
+      return (
+        '已清理 ' +
+        cleaned +
+        ' 张 / 跳过 ' +
+        skipped.length +
+        ' 张' +
+        (reasons ? '（' + reasons + '；详情见各工单的清理步）' : '')
+      )
     }
 
     function TicketDetail({ ticket, view, tickets, open, member }) {

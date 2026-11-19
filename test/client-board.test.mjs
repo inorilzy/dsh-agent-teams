@@ -592,7 +592,19 @@ test('the stepper ends with a cleanup step and the run overview counts cleaned a
   assert.equal(text(last), '清理')
   assert.equal(last.props['data-state'], 'done')
   const overview = text(find(root, (n) => n.props['data-dag-cleanup'] !== undefined))
-  assert.match(overview, /已清理 1 张 \/ 跳过 1 张（B：worktree has uncommitted changes）/)
+  assert.match(overview, /已清理 1 张 \/ 跳过 1 张（worktree has uncommitted changes：B；详情见各工单的清理步）/)
+  // Many skipped tickets fold into one line per reason category, without file lists or paths.
+  const many = Array.from({ length: 23 }, (_, i) => ({
+    id: 'T' + String(i + 1).padStart(2, '0'),
+    status: 'INTEGRATED',
+    cleanup: 'skipped',
+    cleanupReason: 'worktree has uncommitted local files (ignored: ".env"): /tmp/wt/T' + i,
+  }))
+  const folded = text(find(boardFor(many), (n) => n.props['data-dag-cleanup'] !== undefined))
+  assert.equal(
+    folded,
+    '已清理 0 张 / 跳过 23 张（worktree has uncommitted local files：T01、T02、T03、T04、T05、T06 等 23 张；详情见各工单的清理步）',
+  )
   const skipped = boardFor([{ id: 'B', status: 'INTEGRATED', cleanup: 'skipped', cleanupReason: 'not merged' }])
   const step = findAll(skipped, (n) => n.props['data-dag-step'] === 'cleanup')[0]
   assert.equal(step.props['data-state'], 'skipped')

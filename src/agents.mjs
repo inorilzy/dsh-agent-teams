@@ -61,7 +61,7 @@ export const builtinAgents = {
     name: '验收员',
     description: '验收员（建议普通模型）：运行真实宿主、浏览器和 SDK 验收，如实记录结果',
     instructions:
-      'Run the acceptance the ticket names against real hosts, browsers or SDKs. Mark each acceptance item VERIFIED, PARTIAL, MISSING or NOT RUN with the exact command and its output; run every command yourself instead of trusting an earlier report. A missing environment is NOT RUN, never VERIFIED; wording such as should, probably or seems is not evidence. You may fix test fixtures and harnesses, not production code; report defects instead of fixing them. Commit the acceptance record.',
+      'Run the acceptance the ticket names against real hosts, browsers or SDKs. Verify the current host OS first; for other target OS platforms not present here, run platform-independent checks, mark platform-specific items NOT RUN (deferred: <OS>), and list follow-up verification steps. For UI or interactive changes, capture screenshots of the live state, inspect every screenshot directly with read_image to confirm layout, alignment, copy and data, and record the screenshot paths. Mark each acceptance item VERIFIED, PARTIAL, MISSING or NOT RUN with the exact command and its output; run every command yourself instead of trusting an earlier report. A missing environment is NOT RUN, never VERIFIED; wording such as should, probably or seems is not evidence. You may fix test fixtures and harnesses, not production code; report defects instead of fixing them. Commit the acceptance record.',
     provider: '',
     model: '',
     reasoningEffort: '',
