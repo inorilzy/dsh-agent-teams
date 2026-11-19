@@ -1397,6 +1397,13 @@ window.__ModuleLoader__.load({
           h('p', { className: 'dtd-hint', 'data-dag-integration': '' }, integrationText(run.integration)),
           run.finalPhase &&
             h('p', { className: 'dtd-hint', 'data-dag-final': run.finalPhase.stage, role: 'status' }, finalText(run.finalPhase)),
+          run.complete &&
+            run.integrationRef &&
+            h(
+              'p',
+              { className: 'dtd-hint', 'data-dag-branch': '' },
+              '集成分支：' + run.integrationRef.replace(/^refs\/heads\//, '') + '（合并回工作分支后生效）',
+            ),
           run.trainPhase &&
             h('p', { className: 'dtd-hint', 'data-dag-train': run.trainPhase.bisect ? 'bisect' : run.trainPhase.stage, role: 'status' }, trainText(run.trainPhase)),
           cleanupSummary(run.tickets) &&

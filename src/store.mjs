@@ -453,7 +453,11 @@ export function normalizeManifest(input, checkRegistry = {}, agentRegistry = {},
   record(checkRegistry, 'checkRegistry')
   record(agentRegistry, 'agentRegistry')
   record(defaults, 'defaults')
-  const specId = safeId(input.specId ?? input.spec_id, 'specId')
+  const rawSpecId = input.specId ?? input.spec_id
+  if (rawSpecId === undefined || rawSpecId === null || rawSpecId === '') {
+    throw new TypeError('manifest.spec_id is required (1–80 letters, numbers, hyphens, dots or underscores)')
+  }
+  const specId = safeId(rawSpecId, 'specId')
   const baseRef = gitRef(input.baseRef ?? input.base_ref ?? 'main')
   const maxWorkers = input.maxWorkers ?? input.max_workers ?? 16
   if (!Number.isInteger(maxWorkers) || maxWorkers < 1 || maxWorkers > 32)

@@ -1,11 +1,12 @@
-import { isAbsolute } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { isAbsolute, resolve } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { builtinAgents } from './agents.mjs'
 import { Coordinator } from './coordinator.mjs'
 import { RunCatalog, mountApproval, mountDashboard, mountModels, validateTicketRoutes } from './dashboard.mjs'
-import { importTickets, writeback } from './tracker.mjs'
+import { importTickets, mergeImportedManifest, writeback } from './tracker.mjs'
 
 export const name = 'dsh-ticket-dag'
 export const inject = [
@@ -103,7 +104,7 @@ const writebackMode = (value) => (['comment', 'close'].includes(value) ? value :
 
 // A spec or tickets on a tracker (from /to-spec and /to-tickets) are imported, not re-split.
 const importRule =
-  'When the goal points at a spec or its tickets (a GitHub issue number or URL, or a local .scratch/<slug> folder, spec.md or issues folder from /to-spec and /to-tickets), call dag_import with it first and build the manifest from its draft. If dependencyMode is declared, keep every ticket and its depends_on exactly as imported: add only verify, agent and manifest checks, and report a dependency that looks wrong instead of changing it. If dependencyMode is none, keep the imported tickets and infer depends_on yourself. If it is no-tickets, split the spec into tickets yourself. Whenever you infer an edge, write its reason into the dependent ticket prompt so the user sees it in the plan review. Keep each ticket source field so the run can report back to the issue.'
+  'When the goal points at a spec or its tickets (a GitHub issue number or URL, or a local .scratch/<slug> folder, spec.md or issues folder from /to-spec and /to-tickets), call dag_import with it first and build the manifest from its draft. Prefer passing {"import_from": "<spec>", "checks": {...}, "max_workers": N, "tickets": [{"id": "...", "agent": "...", "verify": [...], "files": [...]}]} to dag_run so every ticket title, full prompt, acceptance list, depends_on and source is inherited verbatim without truncation or paraphrasing. Never abbreviate an imported ticket prompt into a one-liner. If dependencyMode is declared, keep every ticket and its depends_on exactly as imported: add only verify, agent, files and manifest checks, and report a dependency that looks wrong instead of changing it. If dependencyMode is none, keep the imported tickets and infer depends_on yourself, adding the reason via prompt_append (or the dependent ticket prompt). If it is no-tickets, split the spec into tickets yourself. Keep each ticket source field so the run can report back to the issue.'
 
 // One sentence on how this profile integrates, so the captain can explain skipped checks.
 function integrationNote(integrationMode, selectChecksByFiles) {
@@ -497,7 +498,27 @@ export function apply(ctx, config = {}, { importer = importTickets, reporter = w
           const cwd = await ctx.workingDirectory.ensure(agent, exec.signal)
           const request = { cwd, parentId: agent.id, runId: args.runId }
           if (method === 'run') {
-            const manifest = typeof args.manifest === 'string' ? JSON.parse(args.manifest) : args.manifest
+            let manifest
+            if (typeof args.manifest === 'string') {
+              const trimmed = args.manifest.trim()
+              if (trimmed.startsWith('{')) {
+                manifest = JSON.parse(trimmed)
+              } else {
+                const filePath = isAbsolute(trimmed) ? trimmed : resolve(cwd, trimmed)
+                manifest = JSON.parse(await readFile(filePath, 'utf8'))
+              }
+            } else {
+              manifest = args.manifest
+            }
+            const importFrom = manifest?.import_from ?? manifest?.importFrom
+            if (importFrom !== undefined) {
+              const imported = await importer({
+                cwd,
+                spec: importFrom,
+                repo: manifest.import_repo ?? manifest.importRepo,
+              })
+              manifest = mergeImportedManifest(imported, manifest)
+            }
             return JSON.parse(JSON.stringify(await coordinator.start({ ...request, manifest })))
           }
           if (method === 'add')
@@ -514,9 +535,14 @@ export function apply(ctx, config = {}, { importer = importTickets, reporter = w
 
   register(
     'run',
-    'Start the approved spec manifest and return its runId. Reusing a runId with the same manifest is idempotent. Each ticket verify list is optional and names check IDs: a profile check, or one defined in the manifest checks object ({"<id>": [["program", "arg"]]}), which the user approves with the plan. An empty or omitted verify list means the ticket has no check of its own: its candidate still runs the accumulated regression checks of the tickets already integrated in this run, then integrates once those pass and its trial merge is clean. A ticket may set agent to a configured agent preset ID (for example architect, implementer, frontend, scribe, debugger or verifier) to give its worker that role and model; omit it for the default worker. A ticket may set files to the repository-relative paths or globs it expects to change; the result fileOverlaps lists ticket pairs that may run at the same time and declare overlapping files, as a warning. When the result mode is staged, nothing has started: the user reviews each ticket preset and model in the 「工单 · <runId>」 tab of the conversation right sidebar and approves or discards the plan there. Tell the user that and end the turn; you are notified once it is approved. dag_resume cannot start a staged run. To add work to this run later, use dag_add instead of a new dag_run.',
+    'Start the approved spec manifest and return its runId. Reusing a runId with the same manifest is idempotent. Manifest requires spec_id and tickets (or import_from pointing at a local .scratch/<slug> folder or GitHub spec, plus optional per-ticket overrides {id, agent, verify, files, prompt_append} that inherit full title/prompt/acceptance/depends_on/source verbatim), and may also be a path to a JSON manifest file relative to the repository. Each ticket verify list is optional and names check IDs: a profile check, or one defined in the manifest checks object ({"<id>": [["program", "arg"]]}), which the user approves with the plan. An empty or omitted verify list means the ticket has no check of its own: its candidate still runs the accumulated regression checks of the tickets already integrated in this run, then integrates once those pass and its trial merge is clean. A ticket may set agent to a configured agent preset ID (for example architect, implementer, frontend, scribe, debugger or verifier) to give its worker that role and model; omit it for the default worker. A ticket may set files to the repository-relative paths or globs it expects to change; the result fileOverlaps lists ticket pairs that may run at the same time and declare overlapping files, as a warning. When the result mode is staged, nothing has started: the user reviews each ticket preset and model in the 「工单 · <runId>」 tab of the conversation right sidebar and approves or discards the plan there. Tell the user that and end the turn; you are notified once it is approved. dag_resume cannot start a staged run. To add work to this run later, use dag_add instead of a new dag_run.',
     {
-      manifest: { type: 'json', required: true, description: 'Ticket DAG manifest object or JSON string.' },
+      manifest: {
+        type: 'json',
+        required: true,
+        description:
+          'Ticket DAG manifest object, JSON string, or path to a local JSON manifest file. Must set spec_id + tickets, or import_from (+ optional per-ticket overrides).',
+      },
       runId: {
         type: 'string',
         description: 'Optional stable run ID. Omit to use the spec and captain identity.',

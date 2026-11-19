@@ -122,20 +122,101 @@ function promptFor(header, body) {
 
 function result({ source, spec, tickets, edges, skipped, warnings }) {
   const dependencyMode = !tickets.length ? 'no-tickets' : edges ? 'declared' : 'none'
+  // Omit the full spec body when tickets were already parsed: each ticket prompt
+  // points to spec.ref, and keeping the payload small avoids tool-output truncation.
+  const specOut =
+    dependencyMode === 'no-tickets'
+      ? spec
+      : { id: spec.id, title: spec.title, ref: spec.ref }
   return {
     source,
-    spec,
+    spec: specOut,
     dependencyMode,
     guidance:
       dependencyMode === 'declared'
-        ? 'Blocking edges come from the tracker. Submit these tickets with depends_on unchanged; add only verify, agent and checks.'
+        ? 'Blocking edges come from the tracker. Prefer passing {"import_from": "<spec>", "tickets": [{"id": "...", "agent": "...", "verify": [...], "files": [...]}], ...} to dag_run so every ticket title, prompt, acceptance, depends_on and source is inherited verbatim; or submit these tickets with depends_on unchanged.'
         : dependencyMode === 'none'
-          ? 'The tracker declares no blocking edges. Infer depends_on from the code and the spec, and state the reason for each inferred edge in the dependent ticket prompt.'
+          ? 'The tracker declares no blocking edges. Infer depends_on from the code and the spec, and state the reason for each inferred edge in prompt_append (with import_from) or the dependent ticket prompt.'
           : 'No open tickets were found. Split the spec into tickets yourself, infer depends_on, and state the reason for each inferred edge in the dependent ticket prompt.',
     skipped,
     warnings,
     manifest: { spec_id: spec.id, tickets },
   }
+}
+
+/**
+ * Merge lightweight captain overrides (agent, verify, files, prompt_append,
+ * checks, max_workers, etc.) onto an imported manifest draft so full ticket
+ * bodies, acceptance lists, sources and declared edges are never dropped or
+ * truncated when calling dag_run.
+ */
+export function mergeImportedManifest(imported, overrides = {}) {
+  const baseTickets = imported?.manifest?.tickets ?? []
+  if (!baseTickets.length) {
+    throw new Error(
+      'Imported spec has no open tickets (dependencyMode: no-tickets); split the spec into tickets and pass them directly without import_from',
+    )
+  }
+  const byId = new Map(baseTickets.map((t) => [t.id, t]))
+  const overrideMap = new Map()
+  if (overrides.tickets !== undefined) {
+    if (!Array.isArray(overrides.tickets)) throw new TypeError('tickets must be an array when used with import_from')
+    for (const item of overrides.tickets) {
+      if (!item || typeof item !== 'object' || Array.isArray(item))
+        throw new TypeError('each ticket override must be an object')
+      if (typeof item.id !== 'string' || !byId.has(item.id))
+        throw new Error('ticket override names unknown imported ticket id: ' + String(item.id))
+      if (overrideMap.has(item.id)) throw new Error('duplicate ticket override id: ' + item.id)
+      overrideMap.set(item.id, item)
+    }
+  }
+  const tickets = baseTickets.map((base) => {
+    const ov = overrideMap.get(base.id)
+    if (!ov) return { ...base }
+    const nextDeps = ov.depends_on ?? ov.dependsOn
+    if (nextDeps !== undefined && imported.dependencyMode === 'declared') {
+      const same =
+        Array.isArray(nextDeps) &&
+        nextDeps.length === base.depends_on.length &&
+        nextDeps.every((d) => base.depends_on.includes(d))
+      if (!same) {
+        throw new Error(
+          'Cannot override declared depends_on for ticket ' +
+            base.id +
+            ' (declared: ' +
+            JSON.stringify(base.depends_on) +
+            ')',
+        )
+      }
+    }
+    const append = ov.prompt_append ?? ov.promptAppend
+    const prompt =
+      typeof ov.prompt === 'string' && ov.prompt.trim()
+        ? ov.prompt
+        : typeof append === 'string' && append.trim()
+          ? base.prompt + '\n\n' + append.trim()
+          : base.prompt
+    return {
+      ...base,
+      ...(typeof ov.title === 'string' && ov.title.trim() ? { title: ov.title } : {}),
+      prompt,
+      ...(Array.isArray(ov.acceptance) && ov.acceptance.length ? { acceptance: ov.acceptance } : {}),
+      ...(nextDeps !== undefined ? { depends_on: nextDeps } : {}),
+      ...(ov.verify !== undefined ? { verify: ov.verify } : {}),
+      ...(ov.agent !== undefined ? { agent: ov.agent } : {}),
+      ...(ov.files !== undefined ? { files: ov.files } : {}),
+    }
+  })
+  const merged = { ...overrides }
+  delete merged.import_from
+  delete merged.importFrom
+  delete merged.import_repo
+  delete merged.importRepo
+  if (merged.spec_id === undefined && merged.specId === undefined) {
+    merged.spec_id = imported.manifest.spec_id
+  }
+  merged.tickets = tickets
+  return merged
 }
 
 async function githubImport(ref, { cwd, gh }) {

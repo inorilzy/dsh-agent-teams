@@ -108,7 +108,21 @@ function ledgerDigest(db) {
   }
 }
 function eventText(meta, event, review = '') {
-  return '[dsh-ticket-dag ' + meta.runId + '] ' + event.message + (review ? '\n\n' + review : '') + '\nevent_id=' + event.eventId
+  const branch = meta.ref.replace(/^refs\/heads\//, '')
+  const branchNote =
+    event.type === 'run_completed'
+      ? 'Integration branch: ' + branch + ' (not yet merged into your working branch; merge with `git merge ' + branch + '` when ready).'
+      : ''
+  return (
+    '[dsh-ticket-dag ' +
+    meta.runId +
+    '] ' +
+    event.message +
+    (branchNote ? '\n' + branchNote : '') +
+    (review ? '\n\n' + review : '') +
+    '\nevent_id=' +
+    event.eventId
+  )
 }
 // With reviewOnComplete, the first completion notice asks the captain for one
 // review round; later completions (the appended fixes landing) say it is done.
@@ -170,12 +184,23 @@ function specPrompt(meta, row, upstream) {
   ]
   const branch = meta.ref.replace(/^refs\/heads\//, '')
   const conflicted = row.attempt > 1 && /^Trial merge conflicts with the integration tip/.test(row.message ?? '')
+  const repoRoot = typeof meta.repo === 'string' ? meta.repo : meta.repo.root
+  const acceptanceDir = join(repoRoot, '.scratch', meta.manifest.specId, 'acceptance')
+  const isVerifier = row.agent === 'verifier' || /read_image|screenshot/i.test(row.agentSpec?.instructions ?? '')
   return [
     'Implement this single ticket in the assigned Git worktree. Confirm git rev-parse --show-toplevel matches ' +
       row.path +
       ', and git branch --show-current matches ' +
       row.branch +
       ' before writing.',
+    'Main repository root: ' +
+      repoRoot +
+      '. Do not edit tracked repository files there — commit all code and tracked docs in your assigned worktree.',
+    isVerifier
+      ? 'Non-committed acceptance artifacts (screenshots, local acceptance reports): save them under ' +
+        acceptanceDir +
+        ' instead of inside this temporary worktree, so they remain accessible in the main repository after worktree cleanup and do not leave untracked/ignored files that block automatic cleanup.'
+      : '',
     'Do not change branches, run the DAG control tools, modify other worktrees, or push. The coordinator alone integrates.',
     'Frozen base: ' + row.baseSha + '. Integrated dependencies: ' + JSON.stringify(upstream),
     conflicted
