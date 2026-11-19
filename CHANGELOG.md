@@ -2,6 +2,19 @@
 
 版本号以 `package.json` 为准。条目整理自 Git 提交记录。
 
+## 0.18.4
+
+- `dag_import` 在已有子工单时省略冗余的 `spec.body`，减少响应体积；新增 `mergeImportedManifest()`，`dag_run` 支持 `import_from` 字段及本地 JSON 清单文件路径，按工单 ID 合并 `agent` / `verify` / `files` / `prompt_append` 覆盖项并原样继承完整 `title`、`prompt`、`acceptance`、`depends_on` 与 `source`（禁止篡改已声明依赖）。
+- `normalizeManifest` 在缺失 `spec_id` 时返回清晰的 `manifest.spec_id is required` 报错。
+- 协调器向 worker 提示词注入主仓库根目录，并对 `verifier` 工单明确注入非提交验收产物目录 `<repoRoot>/.scratch/<specId>/acceptance`，避免截图写入临时 worktree 被清理或阻塞自动清理。
+- 全部工单集成完成后的通知与右侧边栏完成态均补充显示集成分支名称（`integration/<runId>`）与合回工作分支提示。
+
+## 0.18.3
+
+- `verifier` 预设提示词补充跨平台与 UI 验收规范：优先在当前宿主 OS 验收，其他平台标记 `NOT RUN (deferred: <OS>)` 并列出后续步骤；UI/交互改动需截取实时状态截图并用 `read_image` 直接核验。
+- worktree 自动清理跳过可再生的构建/缓存忽略产物（如 `node_modules`、`dist`、`__pycache__`、`.DS_Store` 等），不再因构建输出阻塞清理。
+- 看板清理概览按原因类别合并展示被跳过的工单，避免长路径撑满概览区。
+
 ## 0.18.2
 
 - 看板头像先按模型名识别厂商，模型名认不出时才看 provider 名。之前 provider 名在前面的厂商先命中，网关 provider（如 `magpie-anthropic`）下的 Gemini 模型（如 `agy-cli/gemini-4-hydrogen`）会显示 Claude 图标。
