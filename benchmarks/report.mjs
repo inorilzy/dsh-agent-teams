@@ -49,7 +49,7 @@ function parseArgs(argv) {
 }
 
 function ledgerFiles(dir) {
-  const root = join(dir, '.git', 'dsh-ticket-dag', 'runs')
+  const root = join(dir, '.git', 'dsh-agent-teams', 'runs')
   if (!existsSync(root)) return []
   return readdirSync(root)
     .sort()

@@ -6,7 +6,7 @@ import { fileOverlaps } from './selection.mjs'
 import { END_MODES, integrationOf, latestUndeclared, latestWorkerResults, planRevision, readIntegrity } from './store.mjs'
 import { runTiming } from './timing.mjs'
 
-const route = '/api/ticket-dag.dashboard'
+const route = '/api/agent-teams.dashboard'
 const noStore = { 'cache-control': 'no-store' }
 const unreadableDiagnostic = '无法读取这轮任务的 SQLite 记录。请确认原仓库及运行记录仍然可用。'
 
@@ -65,7 +65,7 @@ function displayDiagnostic(value) {
 // as a writer; only the small summary cache index is written.
 export class RunCatalog {
   constructor(profileDir) {
-    this.index = profileDir ? join(profileDir, 'dsh-ticket-dag', 'catalog.sqlite') : null
+    this.index = profileDir ? join(profileDir, 'dsh-agent-teams', 'catalog.sqlite') : null
     this.live = new Map()
     // key -> { signature, summary }: this process's already-read history rows.
     this.cache = new Map()
@@ -511,7 +511,7 @@ async function modelCatalog(llm) {
 
 export function mountModels(ctx, getLlm) {
   ctx.connection.fetch.register({
-    path: '/api/ticket-dag.models',
+    path: '/api/agent-teams.models',
     methods: ['GET'],
     requestBody: 'buffered',
     async fetch() {
@@ -529,7 +529,7 @@ const refuse = (status, text) => new Response(text, { status, headers: noStore }
 function crossSite(request) {
   const type = (request.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
   if (type !== 'application/json') return refuse(415, 'Approval requires an application/json body')
-  if (request.headers.get('x-dsh-ticket-dag') !== '1') return refuse(403, 'Missing x-dsh-ticket-dag: 1 header')
+  if (request.headers.get('x-dsh-agent-teams') !== '1') return refuse(403, 'Missing x-dsh-agent-teams: 1 header')
   const origin = request.headers.get('origin')
   if (origin !== null) {
     let host
@@ -617,7 +617,7 @@ export async function validateTicketRoutes(tickets, getLlm) {
 // dispatcher admits only the owner; the body names the run by its opaque key.
 export function mountApproval(ctx, catalog, coordinator, getLlm = () => undefined) {
   ctx.connection.fetch.register({
-    path: '/api/ticket-dag.approve',
+    path: '/api/agent-teams.approve',
     methods: ['POST'],
     requestBody: 'buffered',
     async fetch(request) {

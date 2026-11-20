@@ -1,7 +1,7 @@
-# 坦克基准 F（按改动文件选测试）的 profile 片段。合并进当前 profile 的 dsh-ticket-dag 配置，保留其他字段。
+# 坦克基准 F（按改动文件选测试）的 profile 片段。合并进当前 profile 的 dsh-agent-teams 配置，保留其他字段。
 # 只改 README、spec 等不在 files 里的文件时，fast 和 soak 都不认领这些文件；
 # 两条命令都声明了 files，于是全量兜底（checks_selected 的 fallback 为 unclaimed:<文件>）。
-- id: dsh-ticket-dag
+- id: dsh-agent-teams
   config:
     integrationMode: each
     selectChecksByFiles: true

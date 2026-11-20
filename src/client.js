@@ -1,6 +1,6 @@
 // DSH serves this entry as a browser script; React is supplied by the DSH Web shell.
 window.__ModuleLoader__.load({
-  id: 'dsh-ticket-dag',
+  id: 'dsh-agent-teams',
   factory(require) {
     const { createElement: h, useEffect, useRef, useState } = require('react')
     const demoChecks = {
@@ -594,7 +594,7 @@ window.__ModuleLoader__.load({
       const inFlight = useRef(false)
       useEffect(() => {
         const ctrl = new AbortController()
-        fetch('api/ticket-dag.models', { signal: ctrl.signal, cache: 'no-store' })
+        fetch('api/agent-teams.models', { signal: ctrl.signal, cache: 'no-store' })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((data) => setCatalog(Array.isArray(data?.providers) ? data : { error: true }))
           .catch((error) => error.name !== 'AbortError' && setCatalog({ error: true }))
@@ -2088,7 +2088,7 @@ window.__ModuleLoader__.load({
       const [pinnedIds, setPinnedIds] = useState(() => run.tickets.map((t) => t.id))
       useEffect(() => {
         const ctrl = new AbortController()
-        fetch('api/ticket-dag.models', { signal: ctrl.signal, cache: 'no-store' })
+        fetch('api/agent-teams.models', { signal: ctrl.signal, cache: 'no-store' })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((data) => setCatalog(Array.isArray(data?.providers) ? data : { error: true }))
           .catch((e) => e.name !== 'AbortError' && setCatalog({ error: true }))
@@ -2190,10 +2190,10 @@ window.__ModuleLoader__.load({
         setBusy(true)
         setError('')
         try {
-          const response = await fetch('api/ticket-dag.approve', {
+          const response = await fetch('api/agent-teams.approve', {
             method: 'POST',
             // The host refuses an approval without this header (CSRF guard).
-            headers: { 'content-type': 'application/json', 'x-dsh-ticket-dag': '1' },
+            headers: { 'content-type': 'application/json', 'x-dsh-agent-teams': '1' },
             body: JSON.stringify({ key: run.key, ...body }),
           })
           if (!response.ok) {
@@ -2535,7 +2535,7 @@ window.__ModuleLoader__.load({
       if (key) query.set('key', key)
       if (sessionId) query.set('parent', sessionId)
       const text = query.toString()
-      return 'api/ticket-dag.dashboard' + (text ? '?' + text : '')
+      return 'api/agent-teams.dashboard' + (text ? '?' + text : '')
     }
 
     // Poll intervals in milliseconds: the open board tab, the conversation header
@@ -2716,14 +2716,14 @@ window.__ModuleLoader__.load({
       )
     }
 
-    const tabId = 'dsh-ticket-dag/progress'
-    const tabKind = 'ticket-dag'
+    const tabId = 'dsh-agent-teams/progress'
+    const tabKind = 'agent-teams'
     // Each run opens at its own address, so it gets its own sidebar tab and
     // reopening the same run reveals that tab.
-    const runPrefix = 'dsh-resource://ticket-dag/'
+    const runPrefix = 'dsh-resource://agent-teams/'
     const runAddress = (run) => runPrefix + run.key + '/' + run.runId
     function parseRun(address) {
-      const match = /^dsh-resource:\/\/ticket-dag\/([0-9a-f]{64})\/([a-z0-9][a-z0-9_-]{0,62})$/.exec(address ?? '')
+      const match = /^dsh-resource:\/\/agent-teams\/([0-9a-f]{64})\/([a-z0-9][a-z0-9_-]{0,62})$/.exec(address ?? '')
       return match ? { key: match[1], runId: match[2] } : null
     }
 
@@ -2790,7 +2790,7 @@ window.__ModuleLoader__.load({
     // Conversation card for one dag_run. It folds the durable dag_run tool call
     // and its result, so it stays in the transcript after the sidebar tab is
     // closed or the session is reopened.
-    const cardKind = 'dsh-ticket-dag/run'
+    const cardKind = 'dsh-agent-teams/run'
     const resultText = (message) =>
       (message?.content ?? [])
         .filter((b) => b?.type === 'text' && typeof b.text === 'string')
@@ -3007,7 +3007,7 @@ window.__ModuleLoader__.load({
         // The Agent preset page needs the settings service; hosts without it
         // keep the row configuration page only.
         ctx.inject?.(['configForms'], (scope) => {
-          const form = scope.configForms.get('dsh-ticket-dag')
+          const form = scope.configForms.get('dsh-agent-teams')
           const face = () => ({
             readConfig: () => form.getSnapshot(),
             watchConfig: (listener) => form.subscribe(listener),
@@ -3016,20 +3016,20 @@ window.__ModuleLoader__.load({
           scope.effect(() =>
             scope.slots.inject('plugins.tab', () =>
               scope.slots.register(
-                { name: 'plugins.tab', id: 'ticket-dag-agents', order: 60, label: () => 'Agent 预设', inject: face },
+                { name: 'plugins.tab', id: 'agent-teams-agents', order: 60, label: () => 'Agent 预设', inject: face },
                 AgentsPage,
               ),
             ),
           )
           scope.effect(() =>
             scope.slots.inject('plugins.bundle.config', () =>
-              scope.slots.register({ name: 'plugins.bundle.config', key: 'dsh-ticket-dag', inject: face }, AgentsPage),
+              scope.slots.register({ name: 'plugins.bundle.config', key: 'dsh-agent-teams', inject: face }, AgentsPage),
             ),
           )
         })
         ctx.effect(() =>
           ctx.slots.inject('plugins.row.config', () =>
-            ctx.slots.register({ name: 'plugins.row.config', key: 'dsh-ticket-dag#dsh-ticket-dag' }, Panel),
+            ctx.slots.register({ name: 'plugins.row.config', key: 'dsh-agent-teams#dsh-agent-teams' }, Panel),
           ),
         )
         // The board lives only in the conversation right sidebar, one 「工单 · <runId>」 tab per run.
@@ -3095,7 +3095,7 @@ window.__ModuleLoader__.load({
               native.slots.register(
                 {
                   name: 'conversation.session.header.actions',
-                  id: 'ticket-dag-entry',
+                  id: 'agent-teams-entry',
                   order: 55,
                   inject: () => ({
                     openRun: (run) => native.sidebarRight.openResource(runAddress(run), { kind: tabKind }),
@@ -3116,7 +3116,7 @@ window.__ModuleLoader__.load({
           native.effect(() =>
             native.slots.inject('conversation.chat.turnTail', () =>
               native.slots.register(
-                { name: 'conversation.chat.turnTail', id: 'ticket-dag-run-cards', order: 55, inject: cardFace },
+                { name: 'conversation.chat.turnTail', id: 'agent-teams-run-cards', order: 55, inject: cardFace },
                 RunTurnCards,
               ),
             ),

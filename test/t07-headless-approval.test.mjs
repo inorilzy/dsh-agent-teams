@@ -11,8 +11,8 @@ function ticketDagBlock(text) {
   const block = text
     .replace(/\r\n/g, '\n')
     .split(/^- id: /m)
-    .find((part) => part.startsWith('dsh-ticket-dag\n'))
-  assert.ok(block, 'examples/profile.patch.yml must contain the dsh-ticket-dag block')
+    .find((part) => part.startsWith('dsh-agent-teams\n'))
+  assert.ok(block, 'examples/profile.patch.yml must contain the dsh-agent-teams block')
   return block
 }
 

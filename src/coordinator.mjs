@@ -114,7 +114,7 @@ function eventText(meta, event, review = '') {
       ? 'Integration branch: ' + branch + ' (not yet merged into your working branch; merge with `git merge ' + branch + '` when ready).'
       : ''
   return (
-    '[dsh-ticket-dag ' +
+    '[dsh-agent-teams ' +
     meta.runId +
     '] ' +
     event.message +
@@ -276,7 +276,7 @@ function serial(run, fn) {
   run.serial = op.catch(() => {})
   return op
 }
-const dbFile = (repo, id) => join(repo.commonDir, 'dsh-ticket-dag', 'runs', safeId(id), 'state.sqlite')
+const dbFile = (repo, id) => join(repo.commonDir, 'dsh-agent-teams', 'runs', safeId(id), 'state.sqlite')
 function openWriter(directory) {
   const db = new DatabaseSync(join(directory, 'owner.sqlite'))
   try {
@@ -526,7 +526,7 @@ export class Coordinator {
       }
       const root = join(
         dirname(meta.repo.root),
-        '.dsh-ticket-worktrees',
+        '.dsh-agent-teams-worktrees',
         hash(meta.repo.commonDir).slice(0, 12),
         runId,
       )
@@ -643,7 +643,7 @@ export class Coordinator {
     } catch {
       return 'unmanaged'
     }
-    const index = join(repo.commonDir, 'dsh-ticket-dag', 'children', childId + '.json')
+    const index = join(repo.commonDir, 'dsh-agent-teams', 'children', childId + '.json')
     let raw
     try {
       raw = await readFile(index, 'utf8')
@@ -1515,7 +1515,7 @@ export class Coordinator {
         upstream[dep] = parent.landedSha
       }
       job.ctrl.signal.throwIfAborted()
-      const index = join(m.repo.commonDir, 'dsh-ticket-dag', 'children')
+      const index = join(m.repo.commonDir, 'dsh-agent-teams', 'children')
       await mkdir(index, { recursive: true })
       await writeFile(
         join(index, row.childId + '.json'),

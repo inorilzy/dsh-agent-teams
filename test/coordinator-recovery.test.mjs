@@ -71,7 +71,7 @@ async function fixture(t, { intent = true, published = false, mode = 'active' } 
   const repo = await git.repoInfo(main),
     ref = 'refs/heads/integration/' + runId
   const base = await git.initIntegration(repo, ref, 'main')
-  const dbPath = join(repo.commonDir, 'dsh-ticket-dag', 'runs', runId, 'state.sqlite')
+  const dbPath = join(repo.commonDir, 'dsh-agent-teams', 'runs', runId, 'state.sqlite')
   mkdirSync(dirname(dbPath), { recursive: true })
   writeFileSync(join(dirname(dbPath), 'initialized'), base)
   const store = new RunStore(dbPath)
@@ -273,7 +273,7 @@ async function multiRunFixture(t) {
   gitRun(cwd, 'commit', '--allow-empty', '-qm', 'seed')
   const repo = await git.repoInfo(cwd),
     baseSha = gitRun(cwd, 'rev-parse', 'main')
-  const ledger = (id) => join(repo.commonDir, 'dsh-ticket-dag', 'runs', id, 'state.sqlite')
+  const ledger = (id) => join(repo.commonDir, 'dsh-agent-teams', 'runs', id, 'state.sqlite')
   const seed = (id, captain, tickets, mode = 'active') => {
     mkdirSync(dirname(ledger(id)), { recursive: true })
     const store = new RunStore(ledger(id))

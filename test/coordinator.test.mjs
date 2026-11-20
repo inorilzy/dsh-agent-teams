@@ -1854,12 +1854,12 @@ test(
       mountApproval(ctx, catalog, coordinator)
       return {
         board: async () =>
-          (await routes['/api/ticket-dag.dashboard'].fetch(new Request('http://x/api/ticket-dag.dashboard'))).json(),
+          (await routes['/api/agent-teams.dashboard'].fetch(new Request('http://x/api/agent-teams.dashboard'))).json(),
         post: (body) =>
-          routes['/api/ticket-dag.approve'].fetch(
-            new Request('http://x/api/ticket-dag.approve', {
+          routes['/api/agent-teams.approve'].fetch(
+            new Request('http://x/api/agent-teams.approve', {
               method: 'POST',
-              headers: { 'content-type': 'application/json', 'x-dsh-ticket-dag': '1' },
+              headers: { 'content-type': 'application/json', 'x-dsh-agent-teams': '1' },
               body: JSON.stringify(body),
             }),
           ),

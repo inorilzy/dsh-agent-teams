@@ -2,6 +2,11 @@
 
 版本号以 `package.json` 为准。条目整理自 Git 提交记录。
 
+## 0.19.0
+
+- 插件正式更名为 **`dsh-agent-teams`**（原 `dsh-ticket-dag`）：包名、插件 ID、配置节点、HTTP 接口（`/api/agent-teams.*`）、请求头（`x-dsh-agent-teams`）、资源地址（`dsh-resource://agent-teams/...`）、持久化存储目录、Git 候选引用与 worktree 根目录（`.dsh-agent-teams-worktrees`）均统一更新为 `dsh-agent-teams`。
+- `/dag` 快捷命令、`Agent Teams` 触发词与 `dag_*` 工具名保持不变。
+
 ## 0.18.4
 
 - `dag_import` 在已有子工单时省略冗余的 `spec.body`，减少响应体积；新增 `mergeImportedManifest()`，`dag_run` 支持 `import_from` 字段及本地 JSON 清单文件路径，按工单 ID 合并 `agent` / `verify` / `files` / `prompt_append` 覆盖项并原样继承完整 `title`、`prompt`、`acceptance`、`depends_on` 与 `source`（禁止篡改已声明依赖）。

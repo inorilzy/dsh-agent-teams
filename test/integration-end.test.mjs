@@ -148,7 +148,7 @@ test('end mode: the lane runs only fast checks; the final check finds, locates a
     assert.ok(timing.totals.finalVerifyMs > 0)
     assert.ok(timing.endedAt >= completions[0].createdAt)
     // Probes are released after use.
-    const probes = join(dirname(cwd), '.dsh-ticket-worktrees')
+    const probes = join(dirname(cwd), '.dsh-agent-teams-worktrees')
     const list = await git(cwd, 'worktree', 'list', '--porcelain')
     assert.doesNotMatch(list, /probes/, probes)
   } finally {
@@ -326,7 +326,7 @@ test('probe helpers only remove the clean probe they created', async (t) => {
   // A worktree the plugin did not mark as a probe is refused.
   const other = join(root, 'other')
   await git(cwd, 'worktree', 'add', '--detach', other, sha)
-  await assert.rejects(gitApi.releaseProbe(info, other, sha), /not a probe owned by dsh-ticket-dag/)
-  await assert.rejects(gitApi.addProbe(info, other, sha), /not a probe owned by dsh-ticket-dag/)
+  await assert.rejects(gitApi.releaseProbe(info, other, sha), /not a probe owned by dsh-agent-teams/)
+  await assert.rejects(gitApi.addProbe(info, other, sha), /not a probe owned by dsh-agent-teams/)
   assert.equal(existsSync(other), true)
 })

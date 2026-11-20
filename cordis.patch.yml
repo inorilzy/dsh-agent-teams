@@ -1,6 +1,6 @@
 - insert:
-    - id: dsh-ticket-dag
-      name: dsh-ticket-dag
+    - id: dsh-agent-teams
+      name: dsh-agent-teams
       config:
         maxWorkers: 16
         checks: {}

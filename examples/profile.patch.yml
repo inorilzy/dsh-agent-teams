@@ -1,5 +1,5 @@
 # Headless alternative to the plugin settings panel. Merge into the active profile and keep other fields.
-- id: dsh-ticket-dag
+- id: dsh-agent-teams
   config:
     # An SDK session has no plan-review panel, so a staged run never starts.
     # examples/hello.json only names the profile checks below. Writing them into

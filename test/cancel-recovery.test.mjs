@@ -100,7 +100,7 @@ async function failedPublication(t) {
     assert.fail(label + ': ' + JSON.stringify(await coordinator.status(query)))
   }
   const repo = await git.repoInfo(main)
-  const dbPath = join(repo.commonDir, 'dsh-ticket-dag', 'runs', runId, 'state.sqlite')
+  const dbPath = join(repo.commonDir, 'dsh-agent-teams', 'runs', runId, 'state.sqlite')
   await seen(() => workers.size === 2, 'A and B start')
   gitRun(main, 'worktree', 'add', '-q', occupant, started.integrationRef.replace('refs/heads/', ''))
   publishA()

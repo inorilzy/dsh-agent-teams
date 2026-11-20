@@ -260,7 +260,7 @@ test('dashboard URL accepts only one opaque key and only supplies a GET route', 
   assert.deepEqual(parents, [null, null, 'session_01:abc-9'])
 })
 
-const approvalHeaders = { 'content-type': 'application/json', 'x-dsh-ticket-dag': '1' }
+const approvalHeaders = { 'content-type': 'application/json', 'x-dsh-agent-teams': '1' }
 const llm = {
   listProviders: () => [{ id: 'acme', name: 'Acme' }],
   async listModels(provider) {
@@ -299,14 +299,14 @@ function approvalRoute(getLlm = () => llm) {
 test('approval POST requires a JSON body, the plugin header and a same-origin caller', async () => {
   const { post, calls } = approvalRoute()
   const discard = { action: 'discard' }
-  assert.equal((await post(discard, { 'x-dsh-ticket-dag': '1' })).status, 415, 'no content type')
-  assert.equal((await post(discard, { 'content-type': 'text/plain', 'x-dsh-ticket-dag': '1' })).status, 415)
+  assert.equal((await post(discard, { 'x-dsh-agent-teams': '1' })).status, 415, 'no content type')
+  assert.equal((await post(discard, { 'content-type': 'text/plain', 'x-dsh-agent-teams': '1' })).status, 415)
   assert.equal((await post(discard, { 'content-type': 'application/json' })).status, 403, 'no plugin header')
-  assert.equal((await post(discard, { ...approvalHeaders, 'x-dsh-ticket-dag': '0' })).status, 403)
+  assert.equal((await post(discard, { ...approvalHeaders, 'x-dsh-agent-teams': '0' })).status, 403)
   assert.equal((await post(discard, { ...approvalHeaders, origin: 'https://evil.example' })).status, 403)
   assert.equal((await post(discard, { ...approvalHeaders, origin: 'null' })).status, 403)
   assert.deepEqual(calls, [], 'a refused request never reaches the coordinator')
-  const json = { 'content-type': 'application/json; charset=utf-8', 'x-dsh-ticket-dag': '1' }
+  const json = { 'content-type': 'application/json; charset=utf-8', 'x-dsh-agent-teams': '1' }
   assert.equal((await post(discard, json)).status, 200)
   assert.equal((await post(discard, { ...approvalHeaders, origin: 'http://127.0.0.1:4000' }, 'http://127.0.0.1:4000')).status, 200)
   assert.equal(calls.length, 2)
@@ -371,7 +371,7 @@ test('approval route approves or discards only an attached staged run named by i
     },
   }
   mountApproval({ connection: { fetch: { register: (r) => (route = r) } } }, catalog, coordinator, () => llm)
-  assert.equal(route.path, '/api/ticket-dag.approve')
+  assert.equal(route.path, '/api/agent-teams.approve')
   assert.deepEqual(route.methods, ['POST'])
   const post = (body) =>
     route.fetch(
@@ -473,7 +473,7 @@ test('model catalog route lists every provider, its models and efforts, and repo
     },
   }
   mountModels({ connection: { fetch: { register: (r) => (route = r) } } }, () => llm)
-  assert.equal(route.path, '/api/ticket-dag.models')
+  assert.equal(route.path, '/api/agent-teams.models')
   assert.deepEqual(route.methods, ['GET'])
   const response = await route.fetch(new Request('http://localhost' + route.path))
   assert.match(response.headers.get('cache-control'), /no-store/)
@@ -739,7 +739,7 @@ test(
       () => undefined,
     )
     const host = connection.createSharedFetchHandler('/api')
-    const url = 'http://localhost/api/ticket-dag.dashboard'
+    const url = 'http://localhost/api/agent-teams.dashboard'
     // A non-owner never reaches the ledger, whether it names a parent or a key.
     assert.equal(
       (await host.fetch(new Request(url + '?parent=captain-owned-repo'), { principal: { kind: 'remote' } })).status,

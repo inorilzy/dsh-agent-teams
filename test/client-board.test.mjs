@@ -736,26 +736,26 @@ test('each conversation gets a right-sidebar tab that reads only its own runs', 
   )
   assert.deepEqual(
     host.tabs.map((t) => [t.id, t.kind, t.title()]),
-    [['dsh-ticket-dag/progress', 'ticket-dag', '工单进度']],
+    [['dsh-agent-teams/progress', 'agent-teams', '工单进度']],
   )
-  assert.equal(host.slots['sidebar.right.pane.tab'].meta.key, 'dsh-ticket-dag/progress')
+  assert.equal(host.slots['sidebar.right.pane.tab'].meta.key, 'dsh-agent-teams/progress')
   host.renderSlot('sidebar.right.pane.tab', { sessionId: 'session-1' })
-  assert.deepEqual(host.urls, ['api/ticket-dag.dashboard?parent=session-1'])
+  assert.deepEqual(host.urls, ['api/agent-teams.dashboard?parent=session-1'])
 
   // Each run opens as its own tab: the address names the run, the title its runId.
   const [tab] = host.tabs
   const key = 'a'.repeat(64)
-  const address = 'dsh-resource://ticket-dag/' + key + '/demo-agents-02'
-  assert.deepEqual([...tab.patterns], ['dsh-resource://ticket-dag/**'])
+  const address = 'dsh-resource://agent-teams/' + key + '/demo-agents-02'
+  assert.deepEqual([...tab.patterns], ['dsh-resource://agent-teams/**'])
   assert.equal(tab.canOpen(address), true)
-  assert.equal(tab.canOpen('dsh-resource://ticket-dag/oops'), false)
+  assert.equal(tab.canOpen('dsh-resource://agent-teams/oops'), false)
   assert.equal(tab.title(address), '工单 · demo-agents-02')
   const pinned = loadHost([])
   pinned.renderSlot('sidebar.right.pane.tab', {
     sessionId: 'session-1',
     useTabInfo: () => ({ tab: { contentId: address } }),
   })
-  assert.deepEqual(pinned.urls, ['api/ticket-dag.dashboard?key=' + key + '&parent=session-1'])
+  assert.deepEqual(pinned.urls, ['api/agent-teams.dashboard?key=' + key + '&parent=session-1'])
 
   const two = [
     { key, runId: 'demo-agents-02', mode: 'active', total: 0, counts: {}, tickets: [] },
@@ -1026,7 +1026,7 @@ test('plan review: named members with their tasks and model, compact task list, 
   const impl = { agent: 'implementer', provider: 'acme', model: 'deep-2', reasoningEffort: 'high' }
   assert.deepEqual(host.posts, [
     [
-      'api/ticket-dag.approve',
+      'api/agent-teams.approve',
       {
         key: selected.key,
         action: 'approve',
@@ -1043,7 +1043,7 @@ test('plan review: named members with their tasks and model, compact task list, 
   ])
   assert.deepEqual(
     { ...host.postHeaders[0] },
-    { 'content-type': 'application/json', 'x-dsh-ticket-dag': '1' },
+    { 'content-type': 'application/json', 'x-dsh-agent-teams': '1' },
     'the approval request carries the JSON type and the plugin header the host requires',
   )
 })
@@ -1652,14 +1652,14 @@ test('settings carry the GitHub writeback choice, off by default', () => {
 test('the conversation header shows 查看工单 only when this conversation has runs, and opens the tab', () => {
   const none = loadHost([[]])
   assert.equal(none.renderSlot('conversation.session.header.actions', { sessionId: 's1' }), null)
-  assert.deepEqual(none.urls, ['api/ticket-dag.dashboard?parent=s1'])
+  assert.deepEqual(none.urls, ['api/agent-teams.dashboard?parent=s1'])
 
   const key = 'c'.repeat(64)
   const host = loadHost([[{ key, runId: 'latest', complete: false }, { key: 'd'.repeat(64), runId: 'older' }]])
   const entry = host.renderSlot('conversation.session.header.actions', { sessionId: 's1' })
   assert.equal(text(entry), '查看工单')
   entry.props.onClick()
-  assert.deepEqual(host.opened, [['dsh-resource://ticket-dag/' + key + '/latest', 'ticket-dag']], 'opens the newest run')
+  assert.deepEqual(host.opened, [['dsh-resource://agent-teams/' + key + '/latest', 'agent-teams']], 'opens the newest run')
 })
 
 // A durable dag_run tool call and its JSON result, as the conversation fold sees them.
@@ -1688,13 +1688,13 @@ function foldCard(definition, ...events) {
 test('each dag_run tool call folds into a conversation card that keeps the run ID and ticket owners', () => {
   const host = loadHost([])
   const [definition] = host.definitions
-  assert.equal(definition.kind, 'dsh-ticket-dag/run')
+  assert.equal(definition.kind, 'dsh-agent-teams/run')
   assert.deepEqual({ ...definition.match(dagCall) }, { id: 'c1', role: 'start' })
   assert.equal(definition.match({ type: 'tool/call', data: { name: 'dag_status', callId: 'c2' } }), null)
   assert.deepEqual({ ...definition.match(dagResult(dagRunResult)) }, { id: 'c1', role: 'update' })
 
   const node = foldCard(definition, dagCall, dagResult(dagRunResult))
-  assert.equal(node.kind, 'dsh-ticket-dag/run')
+  assert.equal(node.kind, 'dsh-agent-teams/run')
   assert.equal(node.anchorSeq, 7)
   assert.equal(node.data.runId, 'demo-01')
   assert.deepEqual(
@@ -1741,13 +1741,13 @@ const cardMembers = (card) => findAll(card, (n) => n.props['data-dag-member'] !=
 test('the run card names its members, shows the run state and opens the run tab', () => {
   const snapshot = cardSnapshot()
   const { host, card } = renderRunCard(snapshot, snapshot)
-  assert.deepEqual(host.urls, ['api/ticket-dag.dashboard?parent=s1'], 'reads this conversation only')
+  assert.deepEqual(host.urls, ['api/agent-teams.dashboard?parent=s1'], 'reads this conversation only')
   assert.match(text(card), /工单 · demo-01/)
   assert.equal(cardState(card), '待确认')
   assert.match(text(card), /待确认 · 4 张工单/)
   assert.deepEqual(cardMembers(card), ['写文档的 · 2 张', '实现者 · 1 张', '默认成员 · 1 张'])
   openRunCard(host, card)
-  assert.deepEqual(host.opened, [['dsh-resource://ticket-dag/' + cardKey + '/demo-01', 'ticket-dag']])
+  assert.deepEqual(host.opened, [['dsh-resource://agent-teams/' + cardKey + '/demo-01', 'agent-teams']])
 
   // Before the run list answers, or for a run no longer listed, the click explains instead.
   const missing = loadHost([null, null, ''])
@@ -1771,7 +1771,7 @@ test('the run card uses the same status words as the board and still opens that 
     assert.match(text(card), visible)
     assert.doesNotMatch(text(card), /进行中|旧快照/)
     openRunCard(host, card)
-    assert.deepEqual(host.opened, [['dsh-resource://ticket-dag/' + cardKey + '/demo-01', 'ticket-dag']])
+    assert.deepEqual(host.opened, [['dsh-resource://agent-teams/' + cardKey + '/demo-01', 'agent-teams']])
   }
   const unread = cardSnapshot({
     available: false,
@@ -1787,7 +1787,7 @@ test('the run card uses the same status words as the board and still opens that 
   assert.equal(cardMembers(card).length, 0, 'an unreadable ledger has no current roster')
   assert.doesNotMatch(text(card), /4 张工单|旧快照/)
   openRunCard(host, card)
-  assert.deepEqual(host.opened, [['dsh-resource://ticket-dag/' + cardKey + '/demo-01', 'ticket-dag']])
+  assert.deepEqual(host.opened, [['dsh-resource://agent-teams/' + cardKey + '/demo-01', 'agent-teams']])
 })
 
 test('a remounted card shows reassigned and appended tickets from the new snapshot', async () => {
@@ -1828,7 +1828,7 @@ test('a remounted card shows reassigned and appended tickets from the new snapsh
   assert.deepEqual(cardMembers(card), ['改派后的实现 · 2 张', '写文档的 · 2 张', '默认成员 · 1 张'])
   assert.doesNotMatch(text(card), /旧快照/)
   openRunCard(host, card)
-  assert.deepEqual(host.opened, [['dsh-resource://ticket-dag/' + cardKey + '/demo-01', 'ticket-dag']])
+  assert.deepEqual(host.opened, [['dsh-resource://agent-teams/' + cardKey + '/demo-01', 'agent-teams']])
 
   // The open board may have another run selected; the card still reads its own snapshot.
   const other = cardSnapshot({ key: 'a'.repeat(64), runId: 'other', tickets: [{ id: 'Z', agent: 'docs' }] })
@@ -1876,7 +1876,7 @@ test('a failed read marks the folded plan as an old snapshot and does not invent
   assert.match(text(opened.card), /不是当前状态/)
   assert.doesNotMatch(text(opened.card), /已暂停|运行中/)
   openRunCard(opened.host, opened.card)
-  assert.deepEqual(opened.host.opened, [['dsh-resource://ticket-dag/' + cardKey + '/demo-01', 'ticket-dag']])
+  assert.deepEqual(opened.host.opened, [['dsh-resource://agent-teams/' + cardKey + '/demo-01', 'agent-teams']])
 })
 
 test('a run missing from the board list is marked an old snapshot, not a live ticket count', async () => {
@@ -1900,7 +1900,7 @@ test('a run missing from the board list is marked an old snapshot, not a live ti
 test('a closed turn shows its run cards in the turn tail instead of at the folded tool call', () => {
   const data = foldCard(loadHost([]).definitions[0], dagCall, dagResult(dagRunResult)).data
   const closed = { turn: 3, status: 'closed' }
-  const node = { key: 'k1', kind: 'dsh-ticket-dag/run', data, location: { kind: 'turn', turn: closed } }
+  const node = { key: 'k1', kind: 'dsh-agent-teams/run', data, location: { kind: 'turn', turn: closed } }
   const host = loadHost([])
   assert.equal(host.renderSlot('conversation.chat.node', { sessionId: 's1', node }), null)
   const useChat = (select) => select({ nodes: new Map([['k1', node], ['x', { kind: 'assistant', location: node.location }]]) })
@@ -1924,7 +1924,7 @@ test('the plugin page tab is the Agent preset page: max agents, presets, per-pre
   }
   const host = loadHost([], { config })
   assert.equal(host.slots['plugins.tab'].meta.label(), 'Agent 预设')
-  assert.deepEqual([...host.namespaces], ['dsh-ticket-dag'])
+  assert.deepEqual([...host.namespaces], ['dsh-agent-teams'])
   const page = host.renderSlot('plugins.tab', {})
   const input = (label) => find(page, (n) => n.props['aria-label'] === label)
   assert.equal(input('最大 Agent 数量').props.value, '6')
@@ -1937,7 +1937,7 @@ test('the plugin page tab is the Agent preset page: max agents, presets, per-pre
   assert.ok(find(row, (n) => n.type === 'button' && text(n) === '编辑'))
   assert.equal(input('验收超时（毫秒）'), undefined)
   assert.equal(find(page, (n) => n.type === 'h3' && text(n) === '验收命令'), undefined)
-  assert.ok(host.urls.includes('api/ticket-dag.models'))
+  assert.ok(host.urls.includes('api/agent-teams.models'))
 
   const loading = loadHost([]).renderSlot('plugins.tab', {})
   assert.match(text(loading), /正在读取插件配置/)
@@ -2001,7 +2001,7 @@ function pollingTab(replies, { pinned = false, document } = {}) {
       return next
     },
   })
-  const address = 'dsh-resource://ticket-dag/' + 'k'.repeat(64) + '/poll'
+  const address = 'dsh-resource://agent-teams/' + 'k'.repeat(64) + '/poll'
   host.renderSlot('sidebar.right.pane.tab', {
     sessionId: 's1',
     ...(pinned && { useTabInfo: () => ({ tab: { contentId: address } }) }),

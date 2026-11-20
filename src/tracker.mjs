@@ -408,7 +408,7 @@ export async function writeback({ cwd, source, mode, runId, ref, landedSha, gh =
   if (source?.kind !== 'github') return { status: 'skipped', reason: 'not a GitHub ticket' }
   const target = source.repo + '#' + source.number
   const body =
-    'dsh-ticket-dag run `' + runId + '` integrated this ticket into `' + ref.replace(/^refs\/heads\//, '') +
+    'dsh-agent-teams run `' + runId + '` integrated this ticket into `' + ref.replace(/^refs\/heads\//, '') +
     '` at ' + landedSha + '. It is not on the default branch until that branch is merged.'
   await gh(cwd, ['issue', 'comment', String(source.number), '--repo', source.repo, '--body', body])
   if (mode === 'close') await gh(cwd, ['issue', 'close', String(source.number), '--repo', source.repo, '--reason', 'completed'])

@@ -337,7 +337,7 @@ test('DSH step and tool guards fence the retired child even after cd, ordinary D
   const h = harness()
   const own = h.logs.get('child').events
   own.push(
-    { type: 'subagent/descriptor', data: { label: 'dsh-ticket-dag/r/A#1' } },
+    { type: 'subagent/descriptor', data: { label: 'dsh-agent-teams/r/A#1' } },
     { type: 'working-directory/change', data: { cwd: '/original-attempt' } },
     { type: 'working-directory/change', data: { cwd: '/unrelated-later-cwd' } },
   )
@@ -404,16 +404,16 @@ test('dag_import is captain-only, reads in the captain cwd, and the captain is t
   assert.deepEqual(seen, [{ cwd: '/repo', spec: '#1', repo: 'o/r' }])
   await assert.rejects(h.invoke('dag_import', { spec: '#1' }, h.child), /top-level/)
   assert.equal(seen.length, 1)
-  const text = h.sections.find((s) => s.name === 'tool:dsh-ticket-dag').text()
+  const text = h.sections.find((s) => s.name === 'tool:dsh-agent-teams').text()
   assert.match(text, /dag_import/)
   assert.match(text, /declared, keep every ticket and its depends_on exactly/)
   assert.match(text, /does not report back to GitHub/)
-  const on = harness({ trackerWriteback: 'close' }).sections.find((s) => s.name === 'tool:dsh-ticket-dag').text()
+  const on = harness({ trackerWriteback: 'close' }).sections.find((s) => s.name === 'tool:dsh-agent-teams').text()
   assert.match(on, /reports each integrated GitHub ticket on its issue \(close\)/)
   assert.doesNotMatch(text, /reviews each run once/)
   const review = harness({ reviewOnComplete: true })
   assert.equal(review.api.reviewOnComplete, true)
-  assert.match(review.sections.find((s) => s.name === 'tool:dsh-ticket-dag').text(), /reviews each run once.*code-review/)
+  assert.match(review.sections.find((s) => s.name === 'tool:dsh-agent-teams').text(), /reviews each run once.*code-review/)
   await h.close()
 })
 
@@ -421,7 +421,7 @@ test('A+F is the default: end mode with file selection, and the captain is told 
   const h = harness()
   assert.equal(h.api.integrationMode, 'end')
   assert.equal(h.api.selectChecksByFiles, true)
-  const text = h.sections.find((s) => s.name === 'tool:dsh-ticket-dag').text()
+  const text = h.sections.find((s) => s.name === 'tool:dsh-agent-teams').text()
   assert.match(text, /Integration mode: end, with checks selected by changed files/)
   assert.match(text, /every check when none is marked fast/)
   assert.match(text, /"check_meta": \{"<id>": \{"files": \["<glob>", \.\.\.\], "fast": true\|false\}\}/)
@@ -431,13 +431,13 @@ test('A+F is the default: end mode with file selection, and the captain is told 
   const each = harness({ integrationMode: 'each', selectChecksByFiles: false })
   assert.equal(each.api.integrationMode, 'each')
   assert.equal(each.api.selectChecksByFiles, false)
-  assert.doesNotMatch(each.sections.find((s) => s.name === 'tool:dsh-ticket-dag').text(), /Integration mode|check_meta/)
+  assert.doesNotMatch(each.sections.find((s) => s.name === 'tool:dsh-agent-teams').text(), /Integration mode|check_meta/)
   await each.close()
 })
 
 test('the captain section states the check timeout, the worker cap, preset choice and how conflicts are handled', async () => {
   const h = harness({ checkTimeoutMs: 600000, maxWorkers: 16 })
-  const text = h.sections.find((s) => s.name === 'tool:dsh-ticket-dag').text()
+  const text = h.sections.find((s) => s.name === 'tool:dsh-agent-teams').text()
   assert.match(text, /600 seconds before it times out/)
   assert.match(text, /Set max_workers explicitly \(this profile allows at most 16\) and tell the user/)
   assert.match(text, /preset that matches how much judgement it needs/)
@@ -451,7 +451,7 @@ test('the captain section states the check timeout, the worker cap, preset choic
 
 test('the captain section says when to use the plugin, names Agent Teams, lists the trusted checks and the /dag command', async () => {
   const h = harness({ checks: { lint: [['node', '--check', 'index.js']], 'unit-tests': [['npm', 'test']] } })
-  const section = h.sections.find((s) => s.name === 'tool:dsh-ticket-dag')
+  const section = h.sections.find((s) => s.name === 'tool:dsh-agent-teams')
   const text = typeof section.text === 'function' ? section.text() : section.text
   assert.match(text, /Agent Teams/i, 'the plugin answers to Agent Teams requests')
   assert.match(text, /two or more tickets/i, 'used only when the work splits into 2+ tickets')
@@ -463,7 +463,7 @@ test('the captain section says when to use the plugin, names Agent Teams, lists 
   assert.match(text, /"checks"/, 'the captain may write its own checks into the manifest')
   assert.match(text, /approves these commands/i, 'and the user approves them')
   // The live settings are read each time, so a newly saved check shows up.
-  const none = harness({ checks: {} }).sections.find((s) => s.name === 'tool:dsh-ticket-dag')
+  const none = harness({ checks: {} }).sections.find((s) => s.name === 'tool:dsh-agent-teams')
   const noneText = typeof none.text === 'function' ? none.text() : none.text
   assert.match(noneText, /no checks configured/i)
   assert.doesNotMatch(noneText, /stop and ask the user/i, 'an empty profile no longer blocks the captain')
@@ -497,7 +497,7 @@ test('a user message starting with /dag adds a captain directive with the goal; 
   const decision = await run([user('/dag 给登录页加记住我，并补测试和文档')])
   assert.equal(decision.kind, 'enter')
   const directive = decision.messages.at(-1)
-  assert.equal(directive.source.kind, 'dsh-ticket-dag-command')
+  assert.equal(directive.source.kind, 'dsh-agent-teams-command')
   const said = directive.content[0].text
   assert.match(said, /dag_run/)
   assert.match(said, /Goal: 给登录页加记住我，并补测试和文档/)
@@ -509,7 +509,7 @@ test('a user message starting with /dag adds a captain directive with the goal; 
   for (const text of ['/dagger now', '请用 /dag 吗', '我们团队讨论一下']) assert.equal(await run([user(text)]), enter, text)
   assert.equal(await run([user('/dag A'), { id: 'a', source: { kind: 'assistant' }, content: [] }, user('继续')]), enter)
   // Workers never receive the captain directive.
-  assert.notEqual((await run([user('/dag X')], h.child)).messages?.at(-1)?.source?.kind, 'dsh-ticket-dag-command')
+  assert.notEqual((await run([user('/dag X')], h.child)).messages?.at(-1)?.source?.kind, 'dsh-agent-teams-command')
   await h.close()
 })
 
@@ -522,7 +522,7 @@ test('a user message containing Agent Teams anywhere adds the captain directive 
 
   for (const text of ['帮我用 Agent Teams 重构登录模块', 'agent teams：补测试', '组建一个 agent team 做这个', '用AgentTeams做', 'use agent-teams here']) {
     const directive = (await run([user(text)])).messages.at(-1)
-    assert.equal(directive?.source?.kind, 'dsh-ticket-dag-command', text)
+    assert.equal(directive?.source?.kind, 'dsh-agent-teams-command', text)
     assert.match(directive.content[0].text, /Agent Teams keyword/, text)
     assert.ok(directive.content[0].text.includes('Goal: ' + text), text)
   }
@@ -534,6 +534,6 @@ test('a user message containing Agent Teams anywhere adds the captain directive 
   assert.match(both.messages[0].content[0].text, /\/dag command[\s\S]*Goal: 用 Agent Teams 做 X/)
   // Only the latest user message counts, and workers never receive the directive.
   assert.equal(await run([user('Agent Teams A'), { id: 'a', source: { kind: 'assistant' }, content: [] }, user('继续')]), enter)
-  assert.notEqual((await run([user('Agent Teams X')], h.child)).messages?.at(-1)?.source?.kind, 'dsh-ticket-dag-command')
+  assert.notEqual((await run([user('Agent Teams X')], h.child)).messages?.at(-1)?.source?.kind, 'dsh-agent-teams-command')
   await h.close()
 })

@@ -33,12 +33,12 @@ async function openBundle(page) {
     await page.waitForFunction(() => !document.querySelector('[role="dialog"]'))
   }
   await page.locator('button[aria-label="插件"]').click()
-  await page.locator('button[aria-label="查看 dsh-ticket-dag"]').click()
+  await page.locator('button[aria-label="查看 dsh-agent-teams"]').click()
 }
 
 async function openPanel(page) {
   await openBundle(page)
-  await page.locator('button[aria-label="配置 dsh-ticket-dag"]').click()
+  await page.locator('button[aria-label="配置 dsh-agent-teams"]').click()
   await page.waitForSelector('input[aria-label="' + maxLabel + '"]', { visible: true })
 }
 
@@ -284,7 +284,7 @@ test(
     )
 
     const rows = yml.load(readFileSync(cfgPath, 'utf8'))
-    const effective = rows.find((row) => row.id === 'dsh-ticket-dag').config
+    const effective = rows.find((row) => row.id === 'dsh-agent-teams').config
     const demo = yml.load(readFileSync(join(project, 'examples', 'profile.patch.yml'), 'utf8'))[0].config
       .checks
     assert.deepEqual(effective, {
@@ -349,7 +349,7 @@ test(
     const dashboard = (parent) =>
       third.evaluate(async (parent) => {
         const res = await fetch(
-          'api/ticket-dag.dashboard' + (parent ? '?parent=' + encodeURIComponent(parent) : ''),
+          'api/agent-teams.dashboard' + (parent ? '?parent=' + encodeURIComponent(parent) : ''),
           { cache: 'no-store' },
         )
         return { status: res.status, body: await res.json().catch(() => null) }
@@ -427,10 +427,10 @@ test(
     assert.notEqual(secondPlan.selected.revision, revision1, 'appending changes the plan revision')
     const stale = await third.evaluate(
       async ({ key, revision, choices }) => {
-        const res = await fetch('api/ticket-dag.approve', {
+        const res = await fetch('api/agent-teams.approve', {
           method: 'POST',
           // The host refuses an approval without the plugin header.
-          headers: { 'content-type': 'application/json', 'x-dsh-ticket-dag': '1' },
+          headers: { 'content-type': 'application/json', 'x-dsh-agent-teams': '1' },
           body: JSON.stringify({ key, action: 'approve', revision, choices }),
         })
         return { status: res.status, body: (await res.text()).trim() }

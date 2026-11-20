@@ -129,8 +129,8 @@ describe('trusted program resolution', { concurrency: false }, () => {
 
     await assert.rejects(git.runChecks(main, [['./missing-tool']]), /Program not found: \.\/missing-tool/)
     await assert.rejects(
-      git.runChecks(main, [['dsh-ticket-dag-no-such-program']]),
-      /trusted host PATH \(absolute entries only\): dsh-ticket-dag-no-such-program/,
+      git.runChecks(main, [['dsh-agent-teams-no-such-program']]),
+      /trusted host PATH \(absolute entries only\): dsh-agent-teams-no-such-program/,
     )
   })
 
@@ -259,7 +259,7 @@ async function recoveryFixture(t) {
   const repo = await git.repoInfo(main)
   const ref = 'refs/heads/integration/' + runId
   const base = await git.initIntegration(repo, ref, 'main')
-  const dbPath = join(repo.commonDir, 'dsh-ticket-dag', 'runs', runId, 'state.sqlite')
+  const dbPath = join(repo.commonDir, 'dsh-agent-teams', 'runs', runId, 'state.sqlite')
   mkdirSync(dirname(dbPath), { recursive: true })
   writeFileSync(join(dirname(dbPath), 'initialized'), base)
   const store = new RunStore(dbPath)

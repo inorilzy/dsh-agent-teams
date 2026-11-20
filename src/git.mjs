@@ -216,7 +216,7 @@ export async function initIntegration(repo, ref, baseRef) {
     'update-ref',
     '--create-reflog',
     '-m',
-    'dsh-ticket-dag: start',
+    'dsh-agent-teams: start',
     ref,
     base,
     '0'.repeat(base.length),
@@ -327,7 +327,7 @@ export async function ownChangedFiles(repo, tipSha, sourceSha) {
 }
 
 function candidatePin(candidate) {
-  return 'refs/dsh-ticket-dag/candidates/' + oid(candidate)
+  return 'refs/dsh-agent-teams/candidates/' + oid(candidate)
 }
 
 /** Full message of the precise immutable commit, including its completion metadata. */
@@ -340,13 +340,13 @@ async function candidateOwner(wt, create, kind = 'candidate') {
   // This file is private to the linked checkout, outside the tracked/tested tree.
   // A candidate and a probe carry different markers, so neither helper adopts the other's checkout.
   const admin = await git(wt, 'rev-parse', '--absolute-git-dir')
-  const marker = join(admin, 'dsh-ticket-dag-' + kind + '-v1')
+  const marker = join(admin, 'dsh-agent-teams-' + kind + '-v1')
   const expected = await realpath(wt)
   if (create) await writeFile(marker, expected, { encoding: 'utf8', flag: 'wx' })
   else
     verify(
       (await exists(marker)) && (await readFile(marker, 'utf8')) === expected,
-      'Checkout is not a ' + kind + ' owned by dsh-ticket-dag: ' + wt,
+      'Checkout is not a ' + kind + ' owned by dsh-agent-teams: ' + wt,
     )
 }
 
@@ -424,7 +424,7 @@ export async function buildCandidate(repo, path, oldTip, sourceSha) {
         '--no-edit',
         '--no-overwrite-ignore',
         '-m',
-        'dsh-ticket-dag: verify ' + source,
+        'dsh-agent-teams: verify ' + source,
         source,
       )
     } catch (err) {
@@ -491,7 +491,7 @@ export async function buildTrain(repo, path, oldTip, sources) {
       throw error
     }
     try {
-      await git(wt, 'merge', '--no-ff', '--no-edit', '--no-overwrite-ignore', '-m', 'dsh-ticket-dag: verify ' + source, source)
+      await git(wt, 'merge', '--no-ff', '--no-edit', '--no-overwrite-ignore', '-m', 'dsh-agent-teams: verify ' + source, source)
     } catch (err) {
       const files = await optionalGit(wt, 'diff', '--name-only', '--diff-filter=U').catch(() => null)
       if (files) {
@@ -602,7 +602,7 @@ export async function publishCandidate(repo, ref, oldTip, candidateSha) {
   const parents = await parentsOf(repo, candidate)
   verify(parents.length === 2 && parents[0] === old, 'Cannot publish a candidate built on a different tip')
   await requireUnoccupied(repo, ref)
-  await git(repo, 'update-ref', '-m', 'dsh-ticket-dag: publish', ref, candidate, old)
+  await git(repo, 'update-ref', '-m', 'dsh-agent-teams: publish', ref, candidate, old)
   // From this instant the target keeps the candidate reachable. Ref housekeeping
   // must not turn a successful CAS into a failed publication for the caller.
   try {

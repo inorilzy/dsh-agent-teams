@@ -8,7 +8,7 @@ import { Coordinator } from './coordinator.mjs'
 import { RunCatalog, mountApproval, mountDashboard, mountModels, validateTicketRoutes } from './dashboard.mjs'
 import { importTickets, mergeImportedManifest, writeback } from './tracker.mjs'
 
-export const name = 'dsh-ticket-dag'
+export const name = 'dsh-agent-teams'
 export const inject = [
   'tools',
   'systemPrompt',
@@ -77,8 +77,8 @@ const runTools = [
     'Remove the recorded worktrees and branches of the integrated tickets in a run, including an ended one, and return each ticket result. Unmerged worktrees and worktrees with tracked changes, untracked or ignored files are kept and skipped with a reason; repeating it is harmless.',
   ],
 ]
-const sourceKind = 'dsh-ticket-dag'
-const commandSource = 'dsh-ticket-dag-command'
+const sourceKind = 'dsh-agent-teams'
+const commandSource = 'dsh-agent-teams-command'
 // /dag alone or followed by whitespace; /dagger and mid-sentence mentions do not count.
 const commandPattern = /^\/dag(?=$|\s)/u
 // Agent Teams, agent team, AgentTeams, agent-teams in any case, also right next to Chinese text;
@@ -168,7 +168,7 @@ export function captainSection({
     ' seconds before it times out; pick checks that finish within that.' +
     ' A trial-merge conflict is sent back to the ticket worker automatically; you are notified only if it keeps conflicting. Then merge the integration branch into that ticket branch in its worktree, commit it with the ticket current DAG trailers, and call dag_retry, which submits that commit without starting a new worker; a ticket added with dag_add cannot change another ticket branch.'
   return [
-    'dsh-ticket-dag is this profile’s Agent Teams plugin: it runs a coding goal as a DAG of tickets, one worker per ticket in its own git worktree, verified and merged into an integration branch.',
+    'dsh-agent-teams is this profile’s Agent Teams plugin: it runs a coding goal as a DAG of tickets, one worker per ticket in its own git worktree, verified and merged into an integration branch.',
     'A user message that starts with /dag or contains "Agent Teams" (any case, also agent team or AgentTeams) always activates it, and the host then adds a directive for that step. Otherwise use it only when the user explicitly asks for it (teams, 工单团队, ticket DAG) and the work splits into two or more tickets; mentioning, discussing or declining it is not a request, and a single small change is done directly, without dag_run.',
     'As captain: read the code first, split the goal into tickets with id, title, a self-contained prompt, depends_on for genuine prerequisites, acceptance, verify and agent' +
       (presets.length ? ' (presets: ' + presets.join(', ') + ')' : '') +
@@ -200,14 +200,14 @@ function invocation(messages) {
 
 function commandDirective({ trigger, goal }, checks) {
   return [
-    'The user activated dsh-ticket-dag, this profile’s Agent Teams plugin, with ' + trigger + '. Follow the dsh-ticket-dag captain rules in your system instructions.',
+    'The user activated dsh-agent-teams, this profile’s Agent Teams plugin, with ' + trigger + '. Follow the dsh-agent-teams captain rules in your system instructions.',
     'Inspect the repository, split the goal into two or more tickets with genuine dependencies only, and call dag_run in this repository. If the goal names a spec or tickets on a tracker, call dag_import first and follow its dependencyMode. If it returns staged, ask the user to review the plan in the right sidebar and end the turn; do not approve it yourself.',
     checkList(checks),
     goal ? 'Goal: ' + goal : 'No goal was given: ask the user what the team should accomplish.',
   ].join('\n')
 }
 const detailLimit = 4096
-const childLabel = 'dsh-ticket-dag/'
+const childLabel = 'dsh-agent-teams/'
 
 function topLevel(agent) {
   const header = agent?.session?.header
@@ -465,7 +465,7 @@ export function apply(ctx, config = {}, { importer = importTickets, reporter = w
             parentId: agent.id,
             eventId,
             text:
-              '[dsh-ticket-dag ' + runId + '] 恢复失败：' + error.slice(0, 500) +
+              '[dsh-agent-teams ' + runId + '] 恢复失败：' + error.slice(0, 500) +
               '\n这轮运行在挂载时无法恢复（可能被其他协调器占用、记录损坏或加载失败）。请在处理后在队长会话中重新打开。' +
               '\nevent_id=' + eventId,
           })
@@ -607,7 +607,7 @@ export function apply(ctx, config = {}, { importer = importTickets, reporter = w
     }),
   )
   ctx.systemPrompt.section({
-    name: 'tool:dsh-ticket-dag',
+    name: 'tool:dsh-agent-teams',
     order: ctx.systemPrompt.getSectionOrder('TOOL_WORKFLOW'),
     // Read on every build, so newly saved checks and presets reach the captain.
     text: () => captainSection(settings()),
@@ -629,7 +629,7 @@ export function apply(ctx, config = {}, { importer = importTickets, reporter = w
             return { kind: 'success', text: 'Agent Teams activated: the captain will split the goal into tickets.' }
           },
         }),
-      'dsh-ticket-dag: /dag command',
+      'dsh-agent-teams: /dag command',
     )
   })
   ctx.effect(
@@ -643,6 +643,6 @@ export function apply(ctx, config = {}, { importer = importTickets, reporter = w
         await Promise.allSettled([...notifying.values()])
       }
     },
-    'dsh-ticket-dag: shutdown',
+    'dsh-agent-teams: shutdown',
   )
 }

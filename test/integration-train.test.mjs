@@ -175,7 +175,7 @@ test('several submissions ride one train, oldest submission first, and are check
     // Train checkouts are released and no pin is left behind, once the train job ended.
     await until(() => ![...co.runs.values()].some((r) => r.integration), 'train job ended')
     assert.doesNotMatch(await git(cwd, 'worktree', 'list', '--porcelain'), /candidates/)
-    assert.equal(await git(cwd, 'for-each-ref', 'refs/dsh-ticket-dag/candidates'), '')
+    assert.equal(await git(cwd, 'for-each-ref', 'refs/dsh-agent-teams/candidates'), '')
   } finally {
     await co.close()
   }

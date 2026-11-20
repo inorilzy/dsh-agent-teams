@@ -24,7 +24,7 @@
 | B 合并列车 | `benchmarks/profiles/b.patch.yml` | `integrationMode: train`，`selectChecksByFiles: false`，`trainSize: 4` |
 
 各片段用同一份 `checkMeta`：`fast` 负责 `src/**`、`checks/unit/**`（快测试），`soak` 负责 `src/**`、`checks/soak.mjs`、
-`checks/harness.mjs`。片段合并进宿主 profile 的 `dsh-ticket-dag` 配置后再开新对话；设置在 `dag_run` 时冻结进清单，
+`checks/harness.mjs`。片段合并进宿主 profile 的 `dsh-agent-teams` 配置后再开新对话；设置在 `dag_run` 时冻结进清单，
 所以不要改 `benchmarks/tank-arena/manifest.json`（会改变基准 SHA）。
 A 下 soak 不在集成通道跑，只在全部工单集成后的最终全量里跑一次（失败时二分还会再跑几次），累计用时包含最终全量。
 E 下 soak 在 worker 提交后立即由插件在它的提交上跑（与其他工单的 worker 侧验收并行，不占集成通道，不采信 worker 自报）；
@@ -152,4 +152,4 @@ B 下几张同时提交的工单坐同一趟列车，只在最后一个合并上
 
 - 真实 AI 输出有随机性。每个模式至少跑 3 轮，比较中位数；差异小于组内波动（最小到最大的范围）时不下结论。
 - 3 轮只够排除明显的偶然，不是统计检验。差距不大时要多跑几轮。
-- 报告只读 `<trial>/.git/dsh-ticket-dag/runs/*/state.sqlite`，所以 trial 要放在本地，出报告前不要删除。
+- 报告只读 `<trial>/.git/dsh-agent-teams/runs/*/state.sqlite`，所以 trial 要放在本地，出报告前不要删除。

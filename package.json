@@ -1,7 +1,7 @@
 {
-  "name": "dsh-ticket-dag",
-  "version": "0.18.4",
-  "description": "Local Git worktrees and a dependency-aware rolling ticket scheduler for DeepSeek Harness",
+  "name": "dsh-agent-teams",
+  "version": "0.19.0",
+  "description": "Agent Teams for DeepSeek Harness: local Git worktrees and a dependency-aware rolling ticket scheduler",
   "type": "module",
   "main": "./src/index.mjs",
   "exports": {

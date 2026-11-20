@@ -36,7 +36,7 @@ async function tempDir(t) {
 
 // 用 RunStore 建出真实表结构，再写入手写事件，这样时间戳和数值都是确定的。
 async function ledger(dir, runId, events, statuses) {
-  const runDir = join(dir, '.git', 'dsh-ticket-dag', 'runs', runId)
+  const runDir = join(dir, '.git', 'dsh-agent-teams', 'runs', runId)
   await mkdir(runDir, { recursive: true })
   const file = join(runDir, 'state.sqlite')
   new RunStore(file).close()
@@ -257,7 +257,7 @@ test('an unreadable ledger is reported instead of ending the report', async (t) 
   const root = await tempDir(t)
   const good = await trial(root, 'good', gh1())
   const broken = join(root, 'broken')
-  const file = join(broken, '.git', 'dsh-ticket-dag', 'runs', 'r1', 'state.sqlite')
+  const file = join(broken, '.git', 'dsh-agent-teams', 'runs', 'r1', 'state.sqlite')
   await mkdir(join(file, '..'), { recursive: true })
   await writeFile(file, 'not a database, long enough that sqlite actually looks at the header')
   const table = reportTable('x=' + good, 'x=' + broken)
@@ -304,7 +304,7 @@ test('an old ledger shows dashes for what it never recorded, a recorded zero sta
 test('the ledger is not changed by reading it', async (t) => {
   const root = await tempDir(t)
   const dir = await trial(root, 'a', gh1())
-  const file = join(dir, '.git', 'dsh-ticket-dag', 'runs', 'r1', 'state.sqlite')
+  const file = join(dir, '.git', 'dsh-agent-teams', 'runs', 'r1', 'state.sqlite')
   const digest = async () => createHash('sha256').update(await readFile(file)).digest('hex')
   const before = await digest()
   reportTable('x=' + dir)

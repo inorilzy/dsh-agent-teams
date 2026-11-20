@@ -60,7 +60,7 @@ function exampleConfig(bin) {
   const yml = createRequire(bin)('js-yaml')
   return yml
     .load(readFileSync(join(project, 'examples', 'profile.patch.yml'), 'utf8'))
-    .find((row) => row.id === 'dsh-ticket-dag').config
+    .find((row) => row.id === 'dsh-agent-teams').config
 }
 function sawStaged(text) {
   return /mode\\*"\s*:\s*\\*"staged/.test(text)
@@ -86,7 +86,7 @@ test(
   async (t) => {
     const bin = realpathSync(binPath)
     const runId = 'dsh-cancel-fixture'
-    const root = mkdtempSync(join(tmpdir(), 'dsh-ticket-dag-cancel-'))
+    const root = mkdtempSync(join(tmpdir(), 'dsh-agent-teams-cancel-'))
     t.after(() => rmSync(root, { recursive: true, force: true }))
     const repo = join(root, 'repo'),
       home = join(root, 'dsh')
@@ -167,7 +167,7 @@ test(
     writeFileSync(
       join(home, 'profiles', 'sdk', 'cordis.patch.yml'),
       JSON.stringify([
-        { id: 'dsh-ticket-dag', config: { requireApproval: false } },
+        { id: 'dsh-agent-teams', config: { requireApproval: false } },
         { id: 'session-telemetry-otel', disabled: true },
       ]),
     )
@@ -262,7 +262,7 @@ for (const { workers, title, custom } of cases)
         supportedHosts.includes(hostVersion),
         'Host version must be one of the package’s tested exact versions',
       )
-      const root = mkdtempSync(join(tmpdir(), 'dsh-ticket-dag-smoke-'))
+      const root = mkdtempSync(join(tmpdir(), 'dsh-agent-teams-smoke-'))
       t.after(() => rmSync(root, { recursive: true, force: true }))
       const repo = join(root, 'repo'),
         home = join(root, 'dsh')
@@ -391,7 +391,7 @@ for (const { workers, title, custom } of cases)
       })
       const profile = join(home, 'profiles', 'sdk')
       const profileConfig = JSON.parse(readFileSync(join(profile, 'package.json')))
-      assert.ok(profileConfig.dsh.profile.bundles.includes('dsh-ticket-dag'))
+      assert.ok(profileConfig.dsh.profile.bundles.includes('dsh-agent-teams'))
       const headless = exampleConfig(bin)
       assert.equal(
         headless.requireApproval,
@@ -402,7 +402,7 @@ for (const { workers, title, custom } of cases)
         join(profile, 'cordis.patch.yml'),
         JSON.stringify([
           {
-            id: 'dsh-ticket-dag',
+            id: 'dsh-agent-teams',
             config: {
               // The documented headless setting. An SDK session has no review panel.
               requireApproval: headless.requireApproval,
@@ -459,7 +459,7 @@ for (const { workers, title, custom } of cases)
           }
           if (frame.params.sessionId === 'captain' && event.type === 'turn/end') captainIdle = true
           if (frame.params.sessionId === 'captain' && event.type === 'agent/inbox/spliced') {
-            receivedNotice ||= event.data.inserted.some((m) => m.source?.kind === 'dsh-ticket-dag')
+            receivedNotice ||= event.data.inserted.some((m) => m.source?.kind === 'dsh-agent-teams')
           }
         } else if (frame.method === 'subagent.started') {
           childSessionId ??= frame.params.childSessionId
