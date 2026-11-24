@@ -146,7 +146,25 @@ window.__ModuleLoader__.load({
 [data-tone=done]>.dtd-dot,.dtd-bar [data-dag-segment=done],.dtd-dot[data-tone=done] {background:var(--dtd-done)}
 [data-tone=blocked]>.dtd-dot,.dtd-bar [data-dag-segment=blocked],.dtd-dot[data-tone=blocked] {background:var(--dtd-blocked)}
 .dtd-badge.wait {background:color-mix(in srgb,var(--dtd-wait) 24%,transparent)}.dtd-progress .dtd-badge.wait {background:color-mix(in srgb,var(--dtd-pending) 24%,transparent)}.dtd-badge.blocked {background:color-mix(in srgb,var(--dtd-blocked) 24%,transparent)}
+.dtd-badge.warn {background:color-mix(in srgb,var(--dtd-wait) 24%,transparent)}
 .dtd-banner {display:flex;align-items:center;gap:.5rem;border-radius:.5rem;padding:.4rem .7rem;font-size:.86rem;background:color-mix(in srgb,var(--dtd-blocked) 12%,transparent)}
+.dtd-final-banner {
+  --dtd-final-tone:var(--dtd-work);
+  display:grid;grid-template-columns:auto minmax(0,1fr);align-items:start;gap:.55rem;
+  border-inline-start:3px solid var(--dtd-final-tone);border-radius:.5rem;padding:.5rem .7rem;
+  background:color-mix(in srgb,var(--dtd-final-tone) 12%,transparent);font-size:.86rem;overflow-wrap:anywhere;
+}
+.dtd-final-banner[data-dag-final=bisect] {--dtd-final-tone:var(--dtd-wait)}
+.dtd-final-banner .dtd-spin {width:1em;height:1em;margin-top:.25em}
+.dtd-final-banner .dtd-spin-track {stroke:color-mix(in srgb,var(--dtd-final-tone) 25%,transparent)}
+.dtd-final-banner .dtd-spin-arc {stroke:var(--dtd-final-tone)}
+.dtd-final-meta {display:flex;flex-wrap:wrap;gap:.1rem .8rem;margin-top:.2rem;font-size:.83rem}
+.dtd-final-meta [role=timer] {font-variant-numeric:tabular-nums}
+.dtd-awaiting-final {font-size:.83rem;font-weight:600}
+.dtd-bar[data-dag-final-pending=true] [data-dag-segment=done] {
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,Canvas 55%,transparent),transparent) -70% 0/40% 100% no-repeat,color-mix(in srgb,var(--dtd-work) 65%,transparent);
+  animation:dtd-sweep 1.8s linear infinite;
+}
 .dtd-fold {display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;border-radius:.5rem;padding:.3rem .5rem;background:var(--dtd-card)}
 .dtd-panel .dtd-fold button {border:0;padding:.2rem .3rem;font-weight:600}.dtd-fold .dtd-hint {margin-inline-start:auto}
 .dtd-fold label {display:flex;align-items:center;gap:.4rem;margin-inline-start:auto;font-size:.83rem}
@@ -179,7 +197,7 @@ window.__ModuleLoader__.load({
 .dtd-canvas .dtd-status,.dtd-canvas .dtd-spin {position:static;inset:auto;pointer-events:none;width:1em;height:1em}.dtd-canvas .dtd-status path {stroke:inherit;stroke-width:inherit;opacity:1}
 @keyframes dtd-rotate {to {transform:rotate(360deg)}}
 @keyframes dtd-sweep {from {background-position:-70% 0,0 0} to {background-position:170% 0,0 0}}
-@media (prefers-reduced-motion:reduce) {.dtd-spin,.dtd-steps [data-state=current] {animation:none}}
+@media (prefers-reduced-motion:reduce) {.dtd-spin,.dtd-steps [data-state=current],.dtd-bar[data-dag-final-pending=true] [data-dag-segment=done] {animation:none}}
 .dtd-steps [data-state=skipped] {border-color:var(--dtd-blocked);opacity:1}
 .dtd-detail .dtd-run-head strong {font-size:.96rem}
 .dtd-panel .dtd-preset:not(.dtd-rule) {border:1px solid color-mix(in srgb,currentColor 16%,transparent);border-radius:.55rem;padding:.5rem .75rem}
@@ -233,9 +251,9 @@ window.__ModuleLoader__.load({
 .dtd-owner {font-size:.84rem;font-weight:600;white-space:nowrap}
 .dtd-appended {font-size:.76rem;padding:0 .35rem;border-radius:.3rem;border:1px solid currentColor;opacity:.75;white-space:nowrap;cursor:help}
 .dtd-run-card {border:1px solid var(--dtd-line);border-radius:.75rem;background:var(--dtd-card);padding:.7rem .9rem;display:grid;gap:.55rem;margin:.4rem 0;line-height:1.5}
-.dtd-run-card-head {display:flex;align-items:center;gap:.6rem;min-width:0}
+.dtd-run-card-head {display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;min-width:0}
 .dtd-run-card-title {font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dtd-run-card-meta {margin-inline-start:auto;font-size:.83rem;opacity:.72;white-space:nowrap}
+.dtd-run-card-meta {margin-inline-start:auto;font-size:.83rem;opacity:.72}
 .dtd-run-card button {font:inherit;font-size:.83rem;font-weight:600;color:inherit;background:color-mix(in srgb,currentColor 10%,transparent);border:1px solid var(--dtd-line);border-radius:.45rem;padding:.2rem .6rem;cursor:pointer;white-space:nowrap}
 .dtd-run-card-members {display:flex;flex-wrap:wrap;gap:.45rem}
 .dtd-run-card-member {display:inline-flex;align-items:center;gap:.35rem;font-size:.85rem;border-radius:999px;padding:.15rem .6rem .15rem .2rem;background:color-mix(in srgb,currentColor 8%,transparent)}
@@ -1071,6 +1089,7 @@ window.__ModuleLoader__.load({
       if (run.available === false) return '记录不可读取'
       if (run.complete) return '已完成'
       if (run.mode === 'active' && run.counts?.NEEDS_ATTENTION > 0) return '运行中 · 有待处理工单'
+      if (run.mode === 'active' && run.finalPhase) return run.finalPhase.stage === 'bisect' ? '二分定位中' : '最终验收中'
       return modes[run.mode] ?? run.mode
     }
 
@@ -1131,6 +1150,40 @@ window.__ModuleLoader__.load({
       }, [ticking])
       const sinceRead = ticking && receivedAt ? Math.max(0, Date.now() - receivedAt) : 0
       return h('span', { 'data-dag-elapsed': '' }, durationText(timing.accumulatedMs + sinceRead))
+    }
+
+    function FinalPhaseElapsed({ startedAt, checkTimeoutMs, serverNow, receivedAt }) {
+      const [, setTick] = useState(0)
+      useEffect(() => {
+        const interval = setInterval(() => setTick((n) => n + 1), 1000)
+        return () => clearInterval(interval)
+      }, [])
+      const now = Date.now()
+      const baseMs = Math.max(0, (Number.isFinite(serverNow) ? serverNow : (receivedAt ?? now)) - startedAt)
+      const sinceRead = receivedAt ? Math.max(0, now - receivedAt) : 0
+      const limit = Number.isFinite(checkTimeoutMs) && checkTimeoutMs > 0 ? ' / 上限 ' + durationText(checkTimeoutMs) : ''
+      return h('span', { role: 'timer', 'aria-live': 'off' }, '已耗时 ' + durationText(baseMs + sinceRead) + limit)
+    }
+
+    function FinalPhaseBanner({ phase, serverNow, receivedAt }) {
+      const hasElapsed = Number.isFinite(phase.startedAt)
+      const hasFailures = Array.isArray(phase.failed) && phase.failed.length > 0
+      return h(
+        'div',
+        { className: 'dtd-final-banner', 'data-dag-final': phase.stage, role: 'status', 'aria-atomic': false },
+        h(StatusIcon, { tone: 'work' }),
+        h(
+          'div',
+          null,
+          h('p', null, finalText(phase)),
+          (hasElapsed || hasFailures) && h(
+            'div',
+            { className: 'dtd-final-meta' },
+            hasElapsed && h(FinalPhaseElapsed, { startedAt: phase.startedAt, checkTimeoutMs: phase.checkTimeoutMs, serverNow, receivedAt }),
+            hasFailures && h('span', null, '已失败：' + phase.failed.join('、')),
+          ),
+        ),
+      )
     }
 
     function timingBreakdown(timing) {
@@ -1232,6 +1285,9 @@ window.__ModuleLoader__.load({
       const complete = counts.INTEGRATED ?? 0
       const count = (s) => counts[s] ?? 0
       const attention = count('NEEDS_ATTENTION')
+      const finalStage = run.mode === 'active' && !run.complete ? run.finalPhase?.stage : null
+      const badgeTone = attention > 0 ? 'blocked' : finalStage === 'bisect' ? 'warn' : finalStage === 'final' ? 'work' : 'neutral'
+      const awaitingFinal = run.tickets.length > 0 && complete === run.tickets.length && !run.complete && Boolean(run.finalPhase)
       const groups = [
         ['done', '已集成', complete],
         ['work', '进行中', rows.filter((r) => r.view.tone === 'work').length],
@@ -1340,7 +1396,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'dtd-run-head' },
-            h('span', { className: 'dtd-badge ' + (attention ? 'blocked' : 'neutral') }, runMode(run)),
+            h('span', { className: 'dtd-badge ' + badgeTone }, runMode(run)),
             h(
               'span',
               { className: 'dtd-summary-captain', 'data-dag-captain': '' },
@@ -1378,7 +1434,7 @@ window.__ModuleLoader__.load({
           }),
           h(
             'div',
-            { className: 'dtd-bar', 'data-dag-bar': '', 'aria-hidden': true },
+            { className: 'dtd-bar', 'data-dag-bar': '', 'data-dag-final-pending': awaitingFinal ? 'true' : undefined, 'aria-hidden': true },
             ...groups
               .filter(([, , n]) => n > 0)
               .map(([tone, , n]) =>
@@ -1399,9 +1455,10 @@ window.__ModuleLoader__.load({
                 ),
               ),
           ),
+          awaitingFinal &&
+            h('p', { className: 'dtd-awaiting-final', 'data-dag-awaiting-final': '' }, '工单已全部集成，等待最终验收通过后完成'),
           h('p', { className: 'dtd-hint', 'data-dag-integration': '' }, integrationText(run.integration)),
-          run.finalPhase &&
-            h('p', { className: 'dtd-hint', 'data-dag-final': run.finalPhase.stage, role: 'status' }, finalText(run.finalPhase)),
+          run.finalPhase && h(FinalPhaseBanner, { phase: run.finalPhase, serverNow: run.now, receivedAt: run.receivedAt }),
           run.complete &&
             run.integrationRef &&
             h(
