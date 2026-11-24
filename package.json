@@ -1,6 +1,6 @@
 {
   "name": "dsh-agent-teams",
-  "version": "0.19.2",
+  "version": "0.19.3",
   "description": "Agent Teams for DeepSeek Harness: local Git worktrees and a dependency-aware rolling ticket scheduler",
   "type": "module",
   "main": "./src/index.mjs",
