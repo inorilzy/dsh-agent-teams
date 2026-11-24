@@ -171,10 +171,12 @@ window.__ModuleLoader__.load({
 .dtd-steps [data-state=done] {border-color:var(--dtd-done);opacity:1}
 .dtd-steps [data-state=current] {border-color:var(--dtd-work);opacity:1;font-weight:600}
 .dtd-steps [data-state=current] {border-top-color:transparent;background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent) -70% 0/40% 3px no-repeat border-box,linear-gradient(var(--dtd-work),var(--dtd-work)) 0 0/100% 3px no-repeat border-box;animation:dtd-sweep 1.4s linear infinite}
-.dtd-spin {flex:none;box-sizing:border-box;width:.75rem;height:.75rem;border-radius:50%;border:2px solid color-mix(in srgb,var(--dtd-work) 25%,transparent);border-top-color:var(--dtd-work);animation:dtd-rotate .8s linear infinite}
+.dtd-spin {flex:none;width:.8rem;height:.8rem;fill:none;stroke-width:1.8;stroke-linecap:round;animation:dtd-rotate .8s linear infinite}
+.dtd-spin-track {fill:none;stroke:color-mix(in srgb,var(--dtd-work) 25%,transparent);stroke-width:1.8}
+.dtd-spin-arc {fill:none;stroke:var(--dtd-work);stroke-width:1.8;stroke-linecap:round}
 .dtd-status {flex:none;width:.8rem;height:.8rem;fill:none;stroke:var(--dtd-idle);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .dtd-status[data-tone=wait] {stroke:var(--dtd-wait)}.dtd-progress .dtd-status[data-tone=wait] {stroke:var(--dtd-pending)}.dtd-status[data-tone=done] {stroke:var(--dtd-done)}.dtd-status[data-tone=blocked] {stroke:var(--dtd-blocked)}.dtd-status[data-dag-glyph=cancelled] {stroke:color-mix(in srgb,var(--dtd-blocked) 75%,var(--dtd-pending))}
-.dtd-canvas .dtd-status {position:static;inset:auto;pointer-events:none;width:1em;height:1em}.dtd-canvas .dtd-spin {width:.9em;height:.9em}.dtd-canvas .dtd-status path {stroke:inherit;stroke-width:inherit;opacity:1}
+.dtd-canvas .dtd-status,.dtd-canvas .dtd-spin {position:static;inset:auto;pointer-events:none;width:1em;height:1em}.dtd-canvas .dtd-status path {stroke:inherit;stroke-width:inherit;opacity:1}
 @keyframes dtd-rotate {to {transform:rotate(360deg)}}
 @keyframes dtd-sweep {from {background-position:-70% 0,0 0} to {background-position:170% 0,0 0}}
 @media (prefers-reduced-motion:reduce) {.dtd-spin,.dtd-steps [data-state=current] {animation:none}}
@@ -1707,7 +1709,14 @@ window.__ModuleLoader__.load({
       cancelled: 'M4 4l8 8M12 4l-8 8',
     }
     function StatusIcon({ tone, glyph = tone }) {
-      if (tone === 'work') return h('span', { className: 'dtd-spin', 'aria-hidden': true })
+      if (tone === 'work') {
+        return h(
+          'svg',
+          { className: 'dtd-spin', viewBox: '0 0 16 16', 'aria-hidden': true },
+          h('circle', { className: 'dtd-spin-track', cx: 8, cy: 8, r: 5.8 }),
+          h('path', { className: 'dtd-spin-arc', d: 'M8 2.2a5.8 5.8 0 0 1 5.8 5.8' }),
+        )
+      }
       if (!glyph || !statusGlyphs[glyph]) return null
       return h(
         'svg',

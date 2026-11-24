@@ -283,6 +283,10 @@ test('only a working ticket spins; the others show a still icon in their state c
   )
   const legend = text(find(root, (n) => n.props['data-dag-legend'] !== undefined))
   for (const part of ['进行中 2', '等待 2']) assert.ok(legend.includes(part), legend)
+  const spin = find(node('C'), (n) => n.props.className === 'dtd-spin')
+  assert.equal(spin.type, 'svg', 'working spinner renders as a crisp SVG ring')
+  assert.ok(find(spin, (n) => n.type === 'circle' && n.props.className === 'dtd-spin-track'))
+  assert.ok(find(spin, (n) => n.type === 'path' && n.props.className === 'dtd-spin-arc'))
 })
 
 test('locked tickets show a padlock glyph and cancelled tickets show a cross glyph', () => {
