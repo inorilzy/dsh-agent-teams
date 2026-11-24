@@ -314,6 +314,7 @@ export class Coordinator {
     maxAppendedTickets = 20,
     maxWorkers = 16,
     checkTimeoutMs = 120000,
+    finalVerifyNoticeDelayMs = 30000,
     retryDelayMs = 1500,
     maxAutoRetries = 2,
     maxConflictRetries = 2,
@@ -332,6 +333,7 @@ export class Coordinator {
       Number.isInteger(maxWorkers) && maxWorkers >= 1 && maxWorkers <= 32,
       'Host maxWorkers must be 1..32',
     )
+    requireValue(Number.isFinite(finalVerifyNoticeDelayMs), 'Invalid final verification notice delay')
     Object.assign(this, {
       launch,
       notify,
@@ -344,6 +346,7 @@ export class Coordinator {
       maxAppendedTickets,
       maxWorkers,
       checkTimeoutMs,
+      finalVerifyNoticeDelayMs,
       retryDelayMs,
       maxAutoRetries,
       maxConflictRetries,
@@ -380,6 +383,7 @@ export class Coordinator {
     maxAppendedTickets = this.maxAppendedTickets,
     maxWorkers,
     checkTimeoutMs,
+    finalVerifyNoticeDelayMs = this.finalVerifyNoticeDelayMs,
     trackerWriteback = this.trackerWriteback,
     reviewOnComplete = this.reviewOnComplete,
     integrationMode = this.integrationMode,
@@ -396,6 +400,7 @@ export class Coordinator {
       Number.isInteger(checkTimeoutMs) && checkTimeoutMs >= 1 && checkTimeoutMs <= 2_147_483_647,
       'Invalid check timeout',
     )
+    requireValue(Number.isFinite(finalVerifyNoticeDelayMs), 'Invalid final verification notice delay')
     requireValue(Number.isInteger(maxAppendedTickets) && maxAppendedTickets >= 0, 'Invalid maxAppendedTickets')
     // Already-open runs retain their immutable verification command and agent
     // preset snapshots, and the integration settings frozen in their manifest.
@@ -408,6 +413,7 @@ export class Coordinator {
       maxAppendedTickets,
       maxWorkers,
       checkTimeoutMs,
+      finalVerifyNoticeDelayMs,
       trackerWriteback,
       reviewOnComplete,
       integrationMode,
@@ -779,7 +785,7 @@ export class Coordinator {
         tickets.every((t) => t.status === 'INTEGRATED') && (!endMode(m.manifest) || run.db.finalVerified(m.tipSha)),
       // The settings frozen at dag_run, not the live profile.
       integration: integrationOf(m.manifest),
-      // The final full check or its bisection while it runs: { stage, checkId, index, total }.
+      // Live progress for the final full check or its bisection.
       finalPhase: run.integration?.final ? run.integration.phase : null,
       // A merge train while it runs: { size, stage, checkId, index, total, step? }.
       trainPhase: run.integration?.train ? { size: run.integration.size, ...run.integration.phase } : null,
@@ -1286,7 +1292,8 @@ export class Coordinator {
       if (run.integration) return
       this._checkPolicy(run)
       const tip = await this._trustedTip(run)
-      const job = { id: null, final: true, phase: { stage: 'final' }, ctrl: new AbortController() }
+      const phase = { stage: 'final', startedAt: Date.now(), checkTimeoutMs: this.checkTimeoutMs, failed: [] }
+      const job = { id: null, final: true, phase, ctrl: new AbortController() }
       run.integration = job
       job.promise = this._finalVerify(run, tip, job)
         .catch((err) => {
@@ -1826,8 +1833,13 @@ export class Coordinator {
     const failed = [],
       output = {}
     for (const [index, id] of checkIds.entries()) {
-      job.phase = { stage, checkId: id, index: index + 1, total: checkIds.length, ...phase }
       const began = Date.now()
+      job.phase = { stage, checkId: id, index: index + 1, total: checkIds.length, ...phase }
+      if (stage === 'final' || stage === 'bisect') {
+        job.phase.startedAt = began
+        job.phase.checkTimeoutMs = this.checkTimeoutMs
+        if (stage === 'final') job.phase.failed = [...failed]
+      }
       let ok = false
       try {
         await git.runChecks(path, run.checks[id], { signal: job.ctrl.signal, timeoutMs: this.checkTimeoutMs })
@@ -1835,6 +1847,7 @@ export class Coordinator {
       } catch (err) {
         if (job.ctrl.signal.aborted) throw err
         failed.push(id)
+        if (stage === 'final') job.phase = { ...job.phase, failed: [...failed] }
         output[id] = message(err).slice(-3000)
       } finally {
         run.db.recordCheck(ticketId, { checkId: id, ms: Date.now() - began, ok, aborted: !ok && job.ctrl.signal.aborted, stage })
@@ -2083,11 +2096,55 @@ export class Coordinator {
    */
   async _finalVerify(run, tip, job) {
     await serial(run, () => this._checkLedger(run))
+    const { signal } = job.ctrl
+    if (this.stopping || signal.aborted) return
     const m = run.db.meta()
     const tickets = run.db.tickets()
     const checkIds = usedChecks(tickets)
     run.db.recordFinal('final_verify_started', 'Final checks started at ' + tip, { tipSha: tip, checks: checkIds })
-    const { failed, output } = await this._probeChecks(run, job, tip, checkIds, 'final')
+    const live = () => !this.stopping && !signal.aborted && run.integration === job
+    let noticeTimer
+    const clearNotice = () => {
+      clearTimeout(noticeTimer)
+      // Also invalidate a timer callback that is already waiting in serial().
+      noticeTimer = undefined
+    }
+    let result
+    try {
+      const delay = this.finalVerifyNoticeDelayMs
+      if (delay > 0 && !run.db.hasFinalEvent('final_verify_running', tip)) {
+        const notifyRunning = () => {
+          serial(run, () => {
+            if (noticeTimer === undefined || !live() || run.db.meta()?.mode !== 'active') return
+            if (run.db.hasFinalEvent('final_verify_running', tip)) return
+            const { checkId = null, index = 0, total = checkIds.length, failed } = job.phase
+            const current = checkId ? ': ' + checkId + ' (' + index + '/' + total + ')' : ''
+            run.db.recordFinal(
+              'final_verify_running',
+              'All tickets are integrated at ' + tip + '. Running final full verification' + current + '.',
+              { tipSha: tip, checks: checkIds, checkId, index, total, failed },
+              { notify: true },
+            )
+            this._drainOutbox(run)
+          }).catch((err) => {
+            if (live()) this._holdQuietly(run, err)
+          })
+        }
+        // Node treats delays above its timer limit as 1 ms. Wait in chunks if needed.
+        const scheduleNotice = (remaining) => {
+          const wait = Math.min(remaining, 2_147_483_647)
+          noticeTimer = setTimeout(remaining > wait ? () => scheduleNotice(remaining - wait) : notifyRunning, wait)
+          noticeTimer.unref?.()
+        }
+        scheduleNotice(delay)
+        signal.addEventListener('abort', clearNotice, { once: true })
+      }
+      result = await this._probeChecks(run, job, tip, checkIds, 'final')
+    } finally {
+      clearNotice()
+      signal.removeEventListener('abort', clearNotice)
+    }
+    const { failed, output } = result
     if (!failed.length) {
       await serial(run, () => {
         if (this.stopping || run.db.meta().mode !== 'active') return
@@ -2096,6 +2153,17 @@ export class Coordinator {
       })
       return
     }
+    await serial(run, () => {
+      if (!live() || run.db.meta()?.mode !== 'active' || run.db.hasFinalEvent('final_verify_bisecting', tip)) return
+      run.db.recordFinal(
+        'final_verify_bisecting',
+        'Final full verification failed at ' + tip + ': ' + failed.join(', ') + '. Automatically bisecting to locate the failing ticket.',
+        { tipSha: tip, failed },
+        { notify: true },
+      )
+      this._drainOutbox(run)
+    })
+    if (!live()) return
     const culprit = await this._bisect(run, job, tip, failed, tickets)
     await serial(run, async () => {
       if (this.stopping || run.db.meta().mode !== 'active') return
@@ -2165,7 +2233,9 @@ export class Coordinator {
       const landed = merges.slice(0, mid + 1).map((sha) => bySha.get(sha)).filter(Boolean)
       const used = new Set(landed.flatMap((t) => t.verify))
       const ids = failed.filter((id) => used.has(id))
-      const ok = ids.length ? !(await this._probeChecks(run, job, merges[mid], ids, 'bisect', { step })).failed.length : true
+      const ok = ids.length
+        ? !(await this._probeChecks(run, job, merges[mid], ids, 'bisect', { step, failed: [...failed] })).failed.length
+        : true
       run.db.recordFinal('bisect_step', merges[mid] + (ok ? ' passes' : ' fails'), { sha: merges[mid], ok, checks: ids })
       if (ok) lo = mid
       else hi = mid

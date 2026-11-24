@@ -222,7 +222,9 @@ test('a final check interrupted by shutdown runs again after restart; cancel abo
   try {
     await co.start({ ...q, manifest: plan([{ id: 'A', title: 'A', verify: ['gate', 'fast'] }]) })
     const phase = await until(async () => (await co.status(q)).finalPhase?.checkId && (await co.status(q)).finalPhase, 'final check running')
-    assert.deepEqual(phase, { stage: 'final', checkId: 'gate', index: 1, total: 2 })
+    const { startedAt, ...fields } = phase
+    assert.ok(Number.isInteger(startedAt) && startedAt > 0)
+    assert.deepEqual(fields, { stage: 'final', checkId: 'gate', index: 1, total: 2, checkTimeoutMs: co.checkTimeoutMs, failed: [] })
     await co.close()
     co = new Coordinator(settings)
     await co.attach(q)
