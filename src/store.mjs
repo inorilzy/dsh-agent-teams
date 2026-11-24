@@ -1161,16 +1161,30 @@ export class RunStore {
   }
 
   /**
-   * A final-check progress event: final_verify_started { tipSha, checks },
-   * bisect_step { sha, ok, checks }, or final_verify_failed without a repair
-   * (the run is held next). Timing only; the captain is not notified.
+   * The ledger preserves progress across restarts and outbox acknowledgements.
+   * Callers serialize this check with recordFinal to notify once per type and tip.
    */
-  recordFinal(type, message, details) {
-    if (!['final_verify_started', 'bisect_step', 'final_verify_failed'].includes(type))
+  hasFinalEvent(type, tipSha) {
+    return Boolean(
+      this.#db
+        .prepare("SELECT 1 FROM events WHERE type=? AND json_extract(details,'$.tipSha')=? LIMIT 1")
+        .get(type, tipSha),
+    )
+  }
+
+  /**
+   * Final-check progress is ledger-only by default. Pass true or { notify: true }
+   * to enqueue a captain notification in the same transaction as the event.
+   */
+  recordFinal(type, message, details, options = {}) {
+    if (![
+      'final_verify_started', 'final_verify_running', 'final_verify_bisecting', 'bisect_step', 'final_verify_failed',
+    ].includes(type))
       throw new TypeError('not a final-check event: ' + type)
     text(message, 'message')
     record(details, 'details')
-    this.#transaction(() => this.#event(type, null, message, details))
+    const notify = typeof options === 'boolean' ? options : options.notify
+    this.#transaction(() => this.#event(type, null, message, details, Boolean(notify)))
   }
 
   /**
