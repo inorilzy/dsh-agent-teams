@@ -303,6 +303,8 @@ export class RunCatalog {
         integrationRef: data.integrationRef ?? null,
         maxWorkers: capWorkers(data.rawMaxWorkers ?? data.maxWorkers, coordinator.maxWorkers),
         diagnostic: displayDiagnostic(data.diagnostic),
+        // The final full check or its bisection while the live coordinator runs it.
+        finalPhase: data.finalPhase ?? null,
       }
       const route = detail ? captainOf(entry.parentId) : undefined
       if (detail)
@@ -326,8 +328,6 @@ export class RunCatalog {
           fileOverlaps: data.fileOverlaps ?? [],
           // The integration mode frozen into the run manifest.
           integration: data.integration ?? { mode: 'each', selectChecksByFiles: false },
-          // The final full check or its bisection while the live coordinator runs it.
-          finalPhase: data.finalPhase ?? null,
           // A merge train while the live coordinator runs it.
           trainPhase: data.trainPhase ?? null,
           // The opaque plan version the review shows and approval must echo back.
