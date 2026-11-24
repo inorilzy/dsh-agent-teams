@@ -186,14 +186,14 @@ function findAll(node, match, out = []) {
 }
 const find = (node, match) => findAll(node, match)[0]
 
-function boardFor(tickets) {
-  return boardHost(tickets).root
+function boardFor(tickets, opts) {
+  return boardHost(tickets, opts).root
 }
 
 // Renders the progress board and keeps the host so a test can read state updates.
 // hovered seeds the dependency map's hovered ticket (RunProgress hook 7, after
 // Dashboard's four hooks and the filter and two fold states).
-function boardHost(tickets, { hovered, selected: picked } = {}) {
+function boardHost(tickets, { hovered, selected: picked, mode = 'active' } = {}) {
   const counts = {}
   for (const t of tickets) counts[t.status] = (counts[t.status] ?? 0) + 1
   const selected = {
@@ -202,7 +202,7 @@ function boardHost(tickets, { hovered, selected: picked } = {}) {
     repoName: 'playground',
     specId: 'hello',
     integrationRef: 'refs/heads/integration/hello-01',
-    mode: 'active',
+    mode,
     complete: false,
     total: tickets.length,
     counts,
@@ -283,6 +283,42 @@ test('only a working ticket spins; the others show a still icon in their state c
   )
   const legend = text(find(root, (n) => n.props['data-dag-legend'] !== undefined))
   for (const part of ['进行中 2', '等待 2']) assert.ok(legend.includes(part), legend)
+})
+
+test('locked tickets show a padlock glyph and cancelled tickets show a cross glyph', () => {
+  const active = boardFor([
+    { id: 'A', status: 'INTEGRATED' },
+    { id: 'C', status: 'RUNNING', livePhase: { stage: 'agent' } },
+    { id: 'L', status: 'PENDING', dependsOn: ['C'] },
+    { id: 'R', status: 'PENDING', dependsOn: ['A'] },
+    { id: 'Q', status: 'SUBMITTED' },
+    { id: 'K', status: 'CANCELLED' },
+  ])
+  const glyph = (tree, id) => {
+    const node = find(tree, (n) => n.props['data-dag-node'] === id)
+    const svg = find(node, (n) => n.props.className === 'dtd-status')
+    return svg ? [svg.props['data-tone'], svg.props['data-dag-glyph'], find(svg, (n) => n.type === 'path')?.props.d] : null
+  }
+  assert.equal(glyph(active, 'L')[0], 'wait')
+  assert.equal(glyph(active, 'L')[1], 'locked')
+  assert.equal(glyph(active, 'R')[1], 'wait')
+  assert.equal(glyph(active, 'Q')[1], 'wait')
+  assert.notEqual(glyph(active, 'L')[2], glyph(active, 'R')[2], 'locked padlock differs from unlocked wait clock')
+  assert.equal(glyph(active, 'K')[0], 'neutral')
+  assert.equal(glyph(active, 'K')[1], 'cancelled')
+
+  const cancelledRun = boardFor(
+    [
+      { id: 'A', status: 'INTEGRATED' },
+      { id: 'P', status: 'PENDING', dependsOn: ['A'] },
+      { id: 'K', status: 'CANCELLED' },
+    ],
+    { mode: 'cancelled' },
+  )
+  assert.equal(glyph(cancelledRun, 'P')[0], 'neutral')
+  assert.equal(glyph(cancelledRun, 'P')[1], 'cancelled')
+  assert.equal(glyph(cancelledRun, 'K')[1], 'cancelled')
+  assert.ok(cssFor(active, '.dtd-status[data-dag-glyph=cancelled]').length > 0)
 })
 
 test('the progress board keeps only useful text: one summary block, one-line tickets, no poll notes', () => {

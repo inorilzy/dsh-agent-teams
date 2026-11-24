@@ -173,7 +173,7 @@ window.__ModuleLoader__.load({
 .dtd-steps [data-state=current] {border-top-color:transparent;background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent) -70% 0/40% 3px no-repeat border-box,linear-gradient(var(--dtd-work),var(--dtd-work)) 0 0/100% 3px no-repeat border-box;animation:dtd-sweep 1.4s linear infinite}
 .dtd-spin {flex:none;box-sizing:border-box;width:.75rem;height:.75rem;border-radius:50%;border:2px solid color-mix(in srgb,var(--dtd-work) 25%,transparent);border-top-color:var(--dtd-work);animation:dtd-rotate .8s linear infinite}
 .dtd-status {flex:none;width:.8rem;height:.8rem;fill:none;stroke:var(--dtd-idle);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.dtd-status[data-tone=wait] {stroke:var(--dtd-wait)}.dtd-progress .dtd-status[data-tone=wait] {stroke:var(--dtd-pending)}.dtd-status[data-tone=done] {stroke:var(--dtd-done)}.dtd-status[data-tone=blocked] {stroke:var(--dtd-blocked)}
+.dtd-status[data-tone=wait] {stroke:var(--dtd-wait)}.dtd-progress .dtd-status[data-tone=wait] {stroke:var(--dtd-pending)}.dtd-status[data-tone=done] {stroke:var(--dtd-done)}.dtd-status[data-tone=blocked] {stroke:var(--dtd-blocked)}.dtd-status[data-dag-glyph=cancelled] {stroke:color-mix(in srgb,var(--dtd-blocked) 75%,var(--dtd-pending))}
 .dtd-canvas .dtd-status {position:static;inset:auto;pointer-events:none;width:1em;height:1em}.dtd-canvas .dtd-spin {width:.9em;height:.9em}.dtd-canvas .dtd-status path {stroke:inherit;stroke-width:inherit;opacity:1}
 @keyframes dtd-rotate {to {transform:rotate(360deg)}}
 @keyframes dtd-sweep {from {background-position:-70% 0,0 0} to {background-position:170% 0,0 0}}
@@ -1032,17 +1032,19 @@ window.__ModuleLoader__.load({
     function ticketView(ticket, byId, mode) {
       const missing = ticket.dependsOn.filter((id) => byId.get(id)?.status !== 'INTEGRATED')
       let [label, tone] = states[ticket.status] ?? [ticket.status, 'neutral']
+      let glyph = ticket.status === 'CANCELLED' ? 'cancelled' : tone
       if (ticket.status === 'PENDING') {
         tone = 'wait'
-        if (mode === 'cancelled') [label, tone] = ['运行已取消', 'neutral']
-        else if (missing.length) label = '等待依赖'
+        glyph = 'wait'
+        if (mode === 'cancelled') [label, tone, glyph] = ['运行已取消', 'neutral', 'cancelled']
+        else if (missing.length) [label, glyph] = ['等待依赖', 'locked']
         else if (mode === 'paused') label = '暂停派工'
         else if (ticket.retryAt > Date.now()) label = '等待退避重试'
         // In a live run a ready ticket waits for a slot; in a plan under review it is merely startable.
-        else [label, tone] = ['可派工', mode === 'staged' ? 'neutral' : 'wait']
+        else [label, tone, glyph] = ['可派工', mode === 'staged' ? 'neutral' : 'wait', mode === 'staged' ? null : 'wait']
       }
       // A submitted ticket only works while it holds the integration slot; otherwise it queues.
-      if (ticket.status === 'SUBMITTED' && !ticket.livePhase) tone = 'wait'
+      if (ticket.status === 'SUBMITTED' && !ticket.livePhase) [tone, glyph] = ['wait', 'wait']
       const phase = ticket.livePhase
       let stage =
         ['RUNNING', 'SUBMITTED', 'PUBLISHING'].includes(ticket.status) && phase && stages[phase.stage]
@@ -1057,9 +1059,10 @@ window.__ModuleLoader__.load({
       const worker = workerView(ticket)
       if (worker?.state === 'running') {
         tone = 'work'
+        glyph = 'work'
         stage = worker.text
       } else if (worker) stage = stage ? stage + ' · ' + worker.text : worker.text
-      return { label, tone, stage, missing, worker }
+      return { label, tone, glyph, stage, missing, worker }
     }
 
     function runMode(run) {
@@ -1660,7 +1663,7 @@ window.__ModuleLoader__.load({
                   { className: 'dtd-node-head', 'data-tone': view.tone },
                   h(Avatar, { route: ticketRoute(ticket, captain), size: Math.round(node.font * 1.6) }),
                   ticket.id,
-                  h(StatusIcon, { tone: view.tone }),
+                  h(StatusIcon, { tone: view.tone, glyph: view.glyph }),
                   // An unassigned ticket keeps its state here instead of a placeholder owner.
                   ticket.agent
                     ? h('small', { 'data-dag-color': owner.color, style: { color: owner.color } }, owner.name)
@@ -1694,19 +1697,22 @@ window.__ModuleLoader__.load({
       )
     }
 
-    // Only a working ticket moves; the others get a still glyph in their tone colour.
+    // Only a working ticket moves; the others get a still glyph in their state colour.
     const statusGlyphs = {
-      wait: 'M4 2h8M4 14h8M5 2c0 4 6 4 6 6s-6 2-6 6M11 2c0 4-6 4-6 6s6 2 6 6',
+      locked:
+        'M4.5 7.2h7a1.5 1.5 0 0 1 1.5 1.5v3.8a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 12.5V8.7a1.5 1.5 0 0 1 1.5-1.5zM5.2 7.2V5a2.8 2.8 0 0 1 5.6 0v2.2M8 10.4v.4',
+      wait: 'M8 1.8a6.2 6.2 0 1 0 0 12.4a6.2 6.2 0 1 0 0-12.4M8 4.8v3.4l2.4 1.6',
       done: 'M3 8.5l3.2 3L13 4.5',
       blocked: 'M8 1.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13M8 4.5v4.2M8 11v.5',
+      cancelled: 'M4 4l8 8M12 4l-8 8',
     }
-    function StatusIcon({ tone }) {
+    function StatusIcon({ tone, glyph = tone }) {
       if (tone === 'work') return h('span', { className: 'dtd-spin', 'aria-hidden': true })
-      if (!statusGlyphs[tone]) return null
+      if (!glyph || !statusGlyphs[glyph]) return null
       return h(
         'svg',
-        { className: 'dtd-status', 'data-tone': tone, viewBox: '0 0 16 16', 'aria-hidden': true },
-        h('path', { d: statusGlyphs[tone] }),
+        { className: 'dtd-status', 'data-tone': tone, 'data-dag-glyph': glyph, viewBox: '0 0 16 16', 'aria-hidden': true },
+        h('path', { d: statusGlyphs[glyph] }),
       )
     }
 

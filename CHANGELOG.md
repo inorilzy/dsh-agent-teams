@@ -2,6 +2,12 @@
 
 版本号以 `package.json` 为准。条目整理自 Git 提交记录。
 
+## 0.19.1
+
+- 优化进度看板依赖图节点状态图标：
+  - 已取消（`CANCELLED` 以及已取消运行下的 `PENDING`）工单新增柔和红色叉号（`×`）图标，一眼可区分已完成与已取消。
+  - 等待上游依赖（未解锁）的工单改用锁头（🔒）图标，替换原先容易看作基因双螺旋的沙漏图形；已解锁但在排队等待的工单（可派工、等待集成、暂停派工、退避重试）改用时钟图标。
+
 ## 0.19.0
 
 - 插件正式更名为 **`dsh-agent-teams`**（原 `dsh-ticket-dag`）：包名、插件 ID、配置节点、HTTP 接口（`/api/agent-teams.*`）、请求头（`x-dsh-agent-teams`）、资源地址（`dsh-resource://agent-teams/...`）、持久化存储目录、Git 候选引用与 worktree 根目录（`.dsh-agent-teams-worktrees`）均统一更新为 `dsh-agent-teams`。
