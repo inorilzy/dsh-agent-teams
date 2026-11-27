@@ -3229,7 +3229,7 @@ window.__ModuleLoader__.load({
       return h(Editor, { form, scope })
     }
 
-    // Plugin-page Agent preset view. It reads and writes the same settings
+    // Bundle-detail Agent preset view. It reads and writes the same settings
     // namespace as the row configuration page through the host's config form.
     function AgentsPage({ readConfig, watchConfig, saveConfig }) {
       const [state, setState] = useState(readConfig)
@@ -3249,14 +3249,6 @@ window.__ModuleLoader__.load({
             watchConfig: (listener) => form.subscribe(listener),
             saveConfig: (ops, revision) => form.mutate(ops, revision),
           })
-          scope.effect(() =>
-            scope.slots.inject('plugins.tab', () =>
-              scope.slots.register(
-                { name: 'plugins.tab', id: 'agent-teams-agents', order: 60, label: () => 'Agent 预设', inject: face },
-                AgentsPage,
-              ),
-            ),
-          )
           scope.effect(() =>
             scope.slots.inject('plugins.bundle.config', () =>
               scope.slots.register({ name: 'plugins.bundle.config', key: 'dsh-agent-teams', inject: face }, AgentsPage),

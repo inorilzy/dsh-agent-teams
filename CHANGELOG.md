@@ -2,6 +2,21 @@
 
 版本号以 `package.json` 为准。条目整理自 Git 提交记录。
 
+## 0.21.1
+
+- 移除「插件」页顶栏重复注册的「Agent 预设」标签（`plugins.tab`），保留 **插件 → 已安装 → dsh-agent-teams** 详情页（`plugins.bundle.config`）与组件 **配置**（`plugins.row.config`）入口。
+
+## 0.21.0
+
+- 为每个预设 Agent 增加**多模型按序自动 Fallback**（覆盖 `dag_preset_subagent` 与 `dag_run` 工单 worker）：
+  - 配置新增 `fallbackModels: [{ provider, model, reasoningEffort }]`，完全兼容已有 profile 配置；工单审批、追加与自动修复链路均透传备选链。
+  - 启动前自动跳过不可用 provider/模型并从下一可用备选启动；运行中遇到模型/供应商异常（限流、额度不足、超时、5xx 等）且重试耗尽后，在同一子会话中保留全部对话与工具历史无缝切换至下一个备选模型继续执行（不误触普通工具异常或手动取消）。
+  - 预设设置页新增「备选模型（Fallback）」编辑区，支持添加、排序、移除与空行校验；同时修复添加预设时滚动聚焦与移除预设时误折叠其他展开行的问题。
+
+## 0.20.0
+
+- 新增 `dag_preset_subagent` 工具，支持直接使用已配置的 Agent Teams 预设（角色说明、模型路由与默认并发配置）委派独立子任务，无需创建 DAG 运行或 git worktree；同时补充内置只读预设 `explorer`、`auditor`、`reviewer`。
+
 ## 0.19.3
 
 - 增强 `end` / `worker-end` 集成模式在**最终全量验收**与**自动二分定位**阶段的可见性与主会话同步，消除全部工单集成后的“假完工”与长时间静默错觉：

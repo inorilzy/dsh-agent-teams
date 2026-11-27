@@ -28,7 +28,7 @@ PRD 把“运行前在看板上审批清单”和“按工单切换模型”列�
 
 ## 插件页
 
-`plugins.tab` 注册为「Agent 预设」页（替代原来的全部运行总览），`plugins.bundle.config` 显示同一页面。页面通过客户端 `configForms.get('dsh-ticket-dag')` 读写配置，只编辑 `maxWorkers`（显示为“最大 Agent 数量”）与 `agents`。完整配置仍在 `plugins.row.config`。运行看板只在对话右侧栏。
+`plugins.bundle.config` 注册为「Agent 预设」页（不再额外占用插件页顶栏的 `plugins.tab`）。页面通过客户端 `configForms.get('dsh-agent-teams')` 读写配置，只编辑 `maxWorkers`（显示为“最大 Agent 数量”）、`requireApproval` 与 `agents`。完整配置仍在 `plugins.row.config`。运行看板只在对话右侧栏。
 
 
 ## 看板与路由

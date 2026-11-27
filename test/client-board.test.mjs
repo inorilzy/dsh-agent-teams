@@ -1950,7 +1950,7 @@ test('a closed turn shows its run cards in the turn tail instead of at the folde
   assert.equal(host.renderSlot('conversation.chat.turnTail', { sessionId: 's1', turn: { turn: 3, status: 'open' }, useChat }), null)
 })
 
-test('the plugin page tab is the Agent preset page: max agents, presets, per-preset limit and model', () => {
+test('the bundle config page is the Agent preset page and no top-level plugins.tab is added', () => {
   const config = {
     status: 'ready',
     revision: 3,
@@ -1963,9 +1963,10 @@ test('the plugin page tab is the Agent preset page: max agents, presets, per-pre
     },
   }
   const host = loadHost([], { config })
-  assert.equal(host.slots['plugins.tab'].meta.label(), 'Agent 预设')
+  assert.equal(host.slots['plugins.tab'], undefined)
+  assert.equal(host.slots['plugins.bundle.config'].meta.key, 'dsh-agent-teams')
   assert.deepEqual([...host.namespaces], ['dsh-agent-teams'])
-  const page = host.renderSlot('plugins.tab', {})
+  const page = host.renderSlot('plugins.bundle.config', {})
   const input = (label) => find(page, (n) => n.props['aria-label'] === label)
   assert.equal(input('最大 Agent 数量').props.value, '6')
   // Saved presets show as a compact list; fields appear only while editing.
@@ -1979,7 +1980,7 @@ test('the plugin page tab is the Agent preset page: max agents, presets, per-pre
   assert.equal(find(page, (n) => n.type === 'h3' && text(n) === '验收命令'), undefined)
   assert.ok(host.urls.includes('api/agent-teams.models'))
 
-  const loading = loadHost([]).renderSlot('plugins.tab', {})
+  const loading = loadHost([]).renderSlot('plugins.bundle.config', {})
   assert.match(text(loading), /正在读取插件配置/)
 })
 
@@ -2548,7 +2549,7 @@ test('preset editor displays, adds, reorders, validates, and saves fallback mode
   const badHost = loadHost([cfg, { revision: 5, base: badBase, draft: badDraft }, null, false, catalog, new Set([0])], {
     config: cfg,
   })
-  const badForm = find(badHost.renderSlot('plugins.tab', {}), (n) => n.type === 'form')
+  const badForm = find(badHost.renderSlot('plugins.bundle.config', {}), (n) => n.type === 'form')
   await badForm.props.onSubmit({ preventDefault() {} })
   assert.equal(badHost.saved.length, 0)
   assert.ok(badHost.sets.some((s) => s?.error && /备选模型尚未选择模型/.test(s.text)))
@@ -2558,7 +2559,7 @@ test('preset editor displays, adds, reorders, validates, and saves fallback mode
   const goodHost = loadHost([cfg, { revision: 5, base: badBase, draft: goodDraft }, null, false, catalog, new Set([0])], {
     config: cfg,
   })
-  const goodForm = find(goodHost.renderSlot('plugins.tab', {}), (n) => n.type === 'form')
+  const goodForm = find(goodHost.renderSlot('plugins.bundle.config', {}), (n) => n.type === 'form')
   await goodForm.props.onSubmit({ preventDefault() {} })
   assert.equal(goodHost.saved.length, 1)
   assert.deepEqual(JSON.parse(JSON.stringify(goodHost.saved[0][0][0].value.arch.fallbackModels)), [
@@ -2578,7 +2579,7 @@ test('removing one preset shifts expanded indices instead of collapsing all open
   const host = loadHost([cfg, null, null, false, catalog, new Set([0, 2])], {
     config: cfg,
   })
-  const page = host.renderSlot('plugins.tab', {})
+  const page = host.renderSlot('plugins.bundle.config', {})
   const rowB = find(page, (n) => n.props['data-dag-preset'] === 'b')
   const removeBtn = find(rowB, (n) => n.type === 'button' && text(n) === '移除')
   removeBtn.props.onClick()
