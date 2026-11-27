@@ -84,6 +84,7 @@ function host(cwd) {
     },
     subagents: {
       async startActivation(spec) {
+        assert.equal(Object.hasOwn(spec, 'request'), false)
         const ticketId = spec.label.split('/').at(-1).split('#')[0]
         const child = {
           ticketId,
@@ -91,7 +92,7 @@ function host(cwd) {
           disposed: 0,
           agent: add(
             spec.childId,
-            { origin: 'subagent', delegationDepth: 1, parentSession: 'root', cwd: spec.request.cwd },
+            { origin: 'subagent', delegationDepth: 1, parentSession: 'root', cwd: spec.cwd },
             [{ type: 'subagent/descriptor', data: { label: spec.label } }],
           ),
         }
@@ -99,10 +100,10 @@ function host(cwd) {
         const result =
           ticketId === 'A'
             ? allowA.then(async () => {
-                writeFileSync(join(spec.request.cwd, 'A.txt'), 'A')
-                await gitAsync(spec.request.cwd, 'add', 'A.txt')
+                writeFileSync(join(spec.cwd, 'A.txt'), 'A')
+                await gitAsync(spec.cwd, 'add', 'A.txt')
                 await gitAsync(
-                  spec.request.cwd,
+                  spec.cwd,
                   'commit',
                   '-qm',
                   'A\n\nDAG-Run: host-cancel\nDAG-Ticket: A\nDAG-Attempt: 1\nDAG-Complete: yes',

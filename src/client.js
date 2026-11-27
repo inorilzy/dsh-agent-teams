@@ -89,11 +89,47 @@ window.__ModuleLoader__.load({
         reasoningEffort: '',
         maxConcurrent: 1,
       },
+      explorer: {
+        name: '探索',
+        description: '探索（建议便宜模型）：只读搜索本地代码库与外部资料，返回路径与原文摘录',
+        instructions:
+          'Explore codebases and external documentation strictly read-only: locate files, trace call paths, summarize relevant symbols and configs, or execute web/documentation lookups (such as multi-search). Return exact file paths, line ranges, URLs, and verbatim excerpts with any gaps noted. Never modify, create, or delete repository files.',
+        provider: '',
+        model: '',
+        reasoningEffort: '',
+        maxConcurrent: 0,
+      },
+      auditor: {
+        name: '审计',
+        description: '审计（建议高智力模型）：只读审查安全、权限、并发、数据一致性与凭据合规风险',
+        instructions:
+          'Audit the target code, diff, or design strictly read-only for security, authorization, sandbox/trust boundaries, secret exposure, injection, race conditions, failure recovery, and data-integrity risks. Report findings ordered by severity with exact file paths, line numbers, concrete exploit or failure paths, and minimal remediation advice. Do not modify code.',
+        provider: '',
+        model: '',
+        reasoningEffort: '',
+        maxConcurrent: 0,
+      },
+      reviewer: {
+        name: '审查',
+        description: '审查（建议高智力模型）：只读审查代码正确性、边界条件、规范与需求一致度',
+        instructions:
+          'Review the target changes or modules strictly read-only for correctness, edge cases, contract adherence, maintainability, and test coverage. Prioritize real bugs, regressions, and spec mismatches over style nits, citing exact file paths and line numbers for each finding. Do not modify code.',
+        provider: '',
+        model: '',
+        reasoningEffort: '',
+        maxConcurrent: 0,
+      },
     }
     const agentFields = ['name', 'description', 'instructions', 'provider', 'model', 'reasoningEffort']
+    const fallbackRow = (f) => ({
+      provider: f?.provider ?? '',
+      model: f?.model ?? '',
+      reasoningEffort: f?.reasoningEffort ?? '',
+    })
     const agentRow = (id, preset) => ({
       id,
       ...Object.fromEntries(agentFields.map((f) => [f, preset?.[f] ?? ''])),
+      fallbackModels: Array.isArray(preset?.fallbackModels) ? preset.fallbackModels.map(fallbackRow) : [],
       maxConcurrent: String(preset?.maxConcurrent ?? 0),
     })
 
@@ -258,6 +294,13 @@ window.__ModuleLoader__.load({
 .dtd-run-card-members {display:flex;flex-wrap:wrap;gap:.45rem}
 .dtd-run-card-member {display:inline-flex;align-items:center;gap:.35rem;font-size:.85rem;border-radius:999px;padding:.15rem .6rem .15rem .2rem;background:color-mix(in srgb,currentColor 8%,transparent)}
 .dtd-ticket-head .dtd-task-title {min-width:0}
+.dtd-fallbacks {display:grid;gap:.5rem;border-top:1px dashed color-mix(in srgb,currentColor 20%,transparent);padding-top:.7rem}
+.dtd-fallbacks-head {display:grid;gap:.15rem}
+.dtd-fallbacks-head span {font-size:.9rem;font-weight:500}
+.dtd-fallback-row {display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.5rem}
+.dtd-fallback-row .dtd-route {display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:.5rem;min-width:0}
+.dtd-fallback-index {font-size:.82rem;opacity:.78;white-space:nowrap;min-width:3.2rem}
+.dtd-fallback-row .dtd-actions button {padding:.28rem .5rem;font-size:.84rem}
 `
 
     function draftFor(value) {
@@ -284,13 +327,27 @@ window.__ModuleLoader__.load({
 
     function agentsFrom(rows) {
       const agents = Object.create(null)
-      for (const [i, { id, ...preset }] of rows.entries()) {
+      for (const [i, { id, fallbackModels = [], ...preset }] of rows.entries()) {
         if (!validId(id)) throw new Error('第 ' + (i + 1) + ' 个预设 Agent 的 ID 无效。请使用以字母或数字开头的短标识，例如 implementer。')
         if (Object.hasOwn(agents, id)) throw new Error('预设 Agent ID 重复：' + id)
         const cap = Number(preset.maxConcurrent)
         if (!/^\d+$/.test(preset.maxConcurrent) || cap > 32)
           throw new Error(id + ' 的同时运行上限须为 0 到 32 之间的整数，0 表示不单独限制。')
-        agents[id] = { ...preset, maxConcurrent: cap }
+        const fallbacks = []
+        for (const [j, fb] of fallbackModels.entries()) {
+          const provider = String(fb?.provider ?? '').trim()
+          const model = String(fb?.model ?? '').trim()
+          const reasoningEffort = String(fb?.reasoningEffort ?? '').trim()
+          if (!model) {
+            throw new Error(id + ' 的第 ' + (j + 1) + ' 个备选模型尚未选择模型。请先选择模型或移除该行。')
+          }
+          fallbacks.push({ provider, model, reasoningEffort })
+        }
+        agents[id] = {
+          ...preset,
+          ...(fallbacks.length ? { fallbackModels: fallbacks } : {}),
+          maxConcurrent: cap,
+        }
       }
       return agents
     }
@@ -456,7 +513,7 @@ window.__ModuleLoader__.load({
     // Options come from the host model catalog. A saved route the catalog no
     // longer lists stays selectable so opening the form never drops it.
     // bare: only the two selects, for table rows whose header names the columns.
-    function ModelPicker({ agent, catalog, modify, label, bare = false, disabled = false }) {
+    function ModelPicker({ agent, catalog, modify, label, bare = false, disabled = false, emptyLabel = '宿主默认' }) {
       const name = label || agent.id || '未命名'
       const providers = catalog?.providers ?? []
       const current = routeKey(agent.provider, agent.model)
@@ -474,7 +531,7 @@ window.__ModuleLoader__.load({
               Object.assign(a, { provider, model, reasoningEffort: '' })
             }),
         },
-        h('option', { value: '' }, '宿主默认'),
+        h('option', { value: '' }, emptyLabel),
         current &&
           !known &&
           h('option', { value: current }, [agent.provider, agent.model].filter(Boolean).join('/') + '（当前目录中没有）'),
@@ -512,38 +569,54 @@ window.__ModuleLoader__.load({
       )
     }
 
-    // One line per preset: what it is, which model, how many may run at once.
-    function presetSummary(agent, catalog) {
+    function routeLabelFor(item, catalog, fallbackText = '宿主默认模型') {
       const model = catalog?.providers
-        ?.find((p) => p.id === agent.provider)
-        ?.models.find((m) => m.id === agent.model)
-      const route = agent.model
-        ? (model?.name ?? [agent.provider, agent.model].filter(Boolean).join('/'))
-        : '宿主默认模型'
-      const effort = agent.reasoningEffort
-        ? (model?.efforts.find((x) => x.id === agent.reasoningEffort)?.name ?? agent.reasoningEffort)
+        ?.find((p) => p.id === item.provider)
+        ?.models.find((m) => m.id === item.model)
+      const route = item.model
+        ? (model?.name ?? [item.provider, item.model].filter(Boolean).join('/'))
+        : fallbackText
+      const effort = item.reasoningEffort
+        ? (model?.efforts.find((x) => x.id === item.reasoningEffort)?.name ?? item.reasoningEffort)
         : ''
-      const cap = Number(agent.maxConcurrent) || 0
-      return [route + (effort ? ' · ' + effort : ''), cap > 0 ? '同时运行 ≤ ' + cap : '不单独限制']
+      return route + (effort ? ' · ' + effort : '')
     }
 
-    function AgentRule({ agent, index, catalog, open, toggle, modify, remove }) {
+    // One line per preset: what it is, which model (+ fallbacks), how many may run at once.
+    function presetSummary(agent, catalog) {
+      const primary = routeLabelFor(agent, catalog)
+      const fallbacks = (agent.fallbackModels ?? []).filter((f) => f?.model)
+      const route = fallbacks.length ? primary + ' → +' + fallbacks.length + ' 备选' : primary
+      const chainTitle = fallbacks.length
+        ? [primary, ...fallbacks.map((f) => routeLabelFor(f, catalog, '未选择'))].join(' → ')
+        : ''
+      const cap = Number(agent.maxConcurrent) || 0
+      return [route, cap > 0 ? '同时运行 ≤ ' + cap : '不单独限制', chainTitle]
+    }
+
+    function AgentRule({ agent, index, catalog, open, toggle, modify, remove, cardRef }) {
       const name = agent.name || builtinAgents[agent.id]?.name || agent.id || '预设 ' + (index + 1)
-      const [route, limit] = presetSummary(agent, catalog)
+      const [route, limit, chainTitle] = presetSummary(agent, catalog)
+      const fallbacks = agent.fallbackModels ?? []
       const head = h(
         'div',
         { className: 'dtd-preset-row' },
         h('strong', null, name),
         agent.id && name !== agent.id && h('code', { className: 'dtd-hint' }, agent.id),
         agent.description && h('span', { className: 'dtd-hint' }, agent.description),
-        h('span', { className: 'dtd-preset-meta' }, route),
+        h('span', { className: 'dtd-preset-meta', ...(chainTitle ? { title: chainTitle } : {}) }, route),
         h('span', { className: 'dtd-preset-meta' }, limit),
         h('span', { className: 'dtd-actions' }, button(open ? '收起' : '编辑', toggle), button('移除', remove)),
       )
-      if (!open) return h('section', { className: 'dtd-preset', 'data-dag-preset': agent.id, 'aria-label': '预设 ' + name }, head)
+      if (!open)
+        return h(
+          'section',
+          { ref: cardRef, className: 'dtd-preset', 'data-dag-preset': agent.id, 'aria-label': '预设 ' + name },
+          head,
+        )
       return h(
         'section',
-        { className: 'dtd-rule dtd-preset', 'data-dag-preset': agent.id, 'aria-label': '预设 ' + name },
+        { ref: cardRef, className: 'dtd-rule dtd-preset', 'data-dag-preset': agent.id, 'aria-label': '预设 ' + name },
         head,
         h(
           'div',
@@ -581,6 +654,73 @@ window.__ModuleLoader__.load({
         ),
         h(ModelPicker, { agent, catalog, modify }),
         h(
+          'div',
+          { className: 'dtd-fallbacks', 'aria-label': (agent.id || '未命名') + ' 的备选模型' },
+          h(
+            'div',
+            { className: 'dtd-fallbacks-head' },
+            h('span', null, '备选模型（Fallback）'),
+            h('small', null, '主模型执行失败（如限流、额度不足、超时或服务异常）时，按以下顺序自动切换，并在同一子会话中保留上下文继续执行。'),
+          ),
+          ...fallbacks.map((fb, j) =>
+            h(
+              'div',
+              { key: j, className: 'dtd-fallback-row', 'data-dag-fallback': j },
+              h('span', { className: 'dtd-fallback-index' }, '备选 ' + (j + 1)),
+              h(ModelPicker, {
+                agent: fb,
+                catalog,
+                bare: true,
+                emptyLabel: '请选择模型…',
+                label: (agent.id || '未命名') + ' 的备选模型 ' + (j + 1),
+                modify: (fn) =>
+                  modify((a) => {
+                    fn(a.fallbackModels[j])
+                  }),
+              }),
+              h(
+                'span',
+                { className: 'dtd-actions' },
+                button(
+                  '上移',
+                  () =>
+                    modify((a) => {
+                      if (j > 0) [a.fallbackModels[j - 1], a.fallbackModels[j]] = [a.fallbackModels[j], a.fallbackModels[j - 1]]
+                    }),
+                  { disabled: j === 0, 'aria-label': '上移备选模型 ' + (j + 1) },
+                ),
+                button(
+                  '下移',
+                  () =>
+                    modify((a) => {
+                      if (j < a.fallbackModels.length - 1)
+                        [a.fallbackModels[j], a.fallbackModels[j + 1]] = [a.fallbackModels[j + 1], a.fallbackModels[j]]
+                    }),
+                  { disabled: j === fallbacks.length - 1, 'aria-label': '下移备选模型 ' + (j + 1) },
+                ),
+                button(
+                  '移除',
+                  () =>
+                    modify((a) => {
+                      a.fallbackModels.splice(j, 1)
+                    }),
+                  { 'aria-label': '移除备选模型 ' + (j + 1) },
+                ),
+              ),
+            ),
+          ),
+          h(
+            'div',
+            { className: 'dtd-actions' },
+            button('添加备选模型', () =>
+              modify((a) => {
+                a.fallbackModels ??= []
+                a.fallbackModels.push(fallbackRow(null))
+              }),
+            ),
+          ),
+        ),
+        h(
           'label',
           null,
           h('span', null, '同时运行上限'),
@@ -612,6 +752,8 @@ window.__ModuleLoader__.load({
       // Indices of preset rows being edited; saved presets show collapsed.
       const [open, setOpen] = useState(() => new Set())
       const inFlight = useRef(false)
+      const pendingFocus = useRef(null)
+      const presetNodes = useRef(new Map())
       useEffect(() => {
         const ctrl = new AbortController()
         fetch('api/agent-teams.models', { signal: ctrl.signal, cache: 'no-store' })
@@ -623,6 +765,15 @@ window.__ModuleLoader__.load({
       const { value, writable, revision } = form.state
       const current = draftFor(value)
       const draft = edit?.draft ?? current
+      useEffect(() => {
+        const idx = pendingFocus.current
+        if (idx === null) return
+        const node = presetNodes.current.get(idx)
+        if (!node) return
+        pendingFocus.current = null
+        node.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' })
+        node.querySelector?.('input')?.focus?.()
+      }, [draft.agents.length, open])
       const base = edit?.base ?? current
       const stale = edit !== null && edit.revision !== revision
       const dirty = edit !== null && JSON.stringify(draft) !== JSON.stringify(base)
@@ -884,7 +1035,9 @@ window.__ModuleLoader__.load({
               'div',
               { className: 'dtd-actions' },
               button('添加预设 Agent', () => {
-                setOpen((old) => new Set(old).add(draft.agents.length))
+                const nextIndex = draft.agents.length
+                pendingFocus.current = nextIndex
+                setOpen((old) => new Set(old).add(nextIndex))
                 change((d) => d.agents.push(agentRow('', null)))
               }),
               button(
@@ -907,11 +1060,22 @@ window.__ModuleLoader__.load({
                 index: i,
                 catalog: catalog?.error ? null : catalog,
                 open: open.has(i),
+                cardRef: (el) => {
+                  if (el) presetNodes.current.set(i, el)
+                  else presetNodes.current.delete(i)
+                },
                 toggle: () => toggle(i),
                 modify: (fn) => change((d) => fn(d.agents[i])),
                 remove: () => {
-                  // Row indices shift after a removal, so editing state restarts collapsed.
-                  setOpen(new Set())
+                  // Keep other expanded rows open by shifting their indices down.
+                  setOpen((old) => {
+                    const next = new Set()
+                    for (const idx of old) {
+                      if (idx < i) next.add(idx)
+                      else if (idx > i) next.add(idx - 1)
+                    }
+                    return next
+                  })
                   change((d) => d.agents.splice(i, 1))
                 },
               }),

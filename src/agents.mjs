@@ -67,7 +67,122 @@ export const builtinAgents = {
     reasoningEffort: '',
     maxConcurrent: 1,
   },
+  explorer: {
+    name: '探索',
+    description: '探索（建议便宜模型）：只读搜索本地代码库与外部资料，返回路径与原文摘录',
+    instructions:
+      'Explore codebases and external documentation strictly read-only: locate files, trace call paths, summarize relevant symbols and configs, or execute web/documentation lookups (such as multi-search). Return exact file paths, line ranges, URLs, and verbatim excerpts with any gaps noted. Never modify, create, or delete repository files.',
+    provider: '',
+    model: '',
+    reasoningEffort: '',
+    maxConcurrent: 0,
+  },
+  auditor: {
+    name: '审计',
+    description: '审计（建议高智力模型）：只读审查安全、权限、并发、数据一致性与凭据合规风险',
+    instructions:
+      'Audit the target code, diff, or design strictly read-only for security, authorization, sandbox/trust boundaries, secret exposure, injection, race conditions, failure recovery, and data-integrity risks. Report findings ordered by severity with exact file paths, line numbers, concrete exploit or failure paths, and minimal remediation advice. Do not modify code.',
+    provider: '',
+    model: '',
+    reasoningEffort: '',
+    maxConcurrent: 0,
+  },
+  reviewer: {
+    name: '审查',
+    description: '审查（建议高智力模型）：只读审查代码正确性、边界条件、规范与需求一致度',
+    instructions:
+      'Review the target changes or modules strictly read-only for correctness, edge cases, contract adherence, maintainability, and test coverage. Prioritize real bugs, regressions, and spec mismatches over style nits, citing exact file paths and line numbers for each finding. Do not modify code.',
+    provider: '',
+    model: '',
+    reasoningEffort: '',
+    maxConcurrent: 0,
+  },
 }
 
 /** The preset an automatically appended fix-<ticket>-<n> ticket uses when the profile has it. */
 export const repairAgent = 'debugger'
+
+/**
+ * Normalize an ordered list of fallback model routes. Each entry must name a
+ * model; empty provider/reasoningEffort fields are omitted.
+ */
+export function normalizeFallbackModels(raw, owner = 'agent preset') {
+  if (raw === undefined || raw === null) return []
+  if (!Array.isArray(raw)) throw new TypeError(owner + '.fallbackModels must be an array')
+  const out = []
+  for (const [i, item] of raw.entries()) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new TypeError(`${owner}.fallbackModels[${i}] must be an object`)
+    }
+    const route = {}
+    for (const field of ['provider', 'model', 'reasoningEffort']) {
+      const value = item[field] ?? ''
+      if (typeof value !== 'string') throw new TypeError(`${owner}.fallbackModels[${i}].${field} must be a string`)
+      if (value.trim()) route[field] = value.trim()
+    }
+    if (!route.model) throw new TypeError(`${owner}.fallbackModels[${i}] must set a model`)
+    out.push(route)
+  }
+  return out
+}
+
+export function routeKey(route) {
+  return JSON.stringify([route?.provider ?? '', route?.model ?? '', route?.reasoningEffort ?? ''])
+}
+
+export function formatRoute(route) {
+  const model = String(route?.model ?? '').trim()
+  if (!model) return 'inherit'
+  const provider = String(route?.provider ?? '').trim()
+  const effort = String(route?.reasoningEffort ?? '').trim()
+  return [provider ? provider + '/' + model : model, effort].filter(Boolean).join(' · ')
+}
+
+/**
+ * Build the ordered, deduplicated list of routes for a preset/ticket spec.
+ * Index 0 is the primary route (or inherited host/parent route when the primary
+ * model is empty), followed by each configured fallback model.
+ */
+export function routeChainOf(spec, inheritedPrimary = null) {
+  const primaryProvider = String(spec?.provider ?? '').trim()
+  const primaryModel = String(spec?.model ?? '').trim()
+  const primaryEffort = String(spec?.reasoningEffort ?? '').trim()
+  const primary = primaryModel
+    ? {
+        ...(primaryProvider && { provider: primaryProvider }),
+        model: primaryModel,
+        ...(primaryEffort && { reasoningEffort: primaryEffort }),
+      }
+    : inheritedPrimary?.model
+      ? {
+          ...(inheritedPrimary.provider && { provider: String(inheritedPrimary.provider).trim() }),
+          model: String(inheritedPrimary.model).trim(),
+          ...(inheritedPrimary.reasoningEffort && {
+            reasoningEffort: String(inheritedPrimary.reasoningEffort).trim(),
+          }),
+          inherited: true,
+        }
+      : { provider: '', model: '', reasoningEffort: '', inherited: true }
+
+  const seen = new Set()
+  const chain = []
+  const push = (entry) => {
+    const key = routeKey(entry)
+    if (seen.has(key)) return
+    seen.add(key)
+    chain.push(entry)
+  }
+  push(primary)
+  for (const fb of Array.isArray(spec?.fallbackModels) ? spec.fallbackModels : []) {
+    const model = String(fb?.model ?? '').trim()
+    if (!model) continue
+    const provider = String(fb?.provider ?? '').trim()
+    const reasoningEffort = String(fb?.reasoningEffort ?? '').trim()
+    push({
+      ...(provider && { provider }),
+      model,
+      ...(reasoningEffort && { reasoningEffort }),
+    })
+  }
+  return chain
+}

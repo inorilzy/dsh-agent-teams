@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { routeKey } from './agents.mjs'
 import { fileOverlaps } from './selection.mjs'
 import { END_MODES, integrationOf, latestUndeclared, latestWorkerResults, planRevision, readIntegrity } from './store.mjs'
 import { runTiming } from './timing.mjs'
@@ -320,6 +321,7 @@ export class RunCatalog {
             provider: p?.provider ?? '',
             model: p?.model ?? '',
             reasoningEffort: p?.reasoningEffort ?? '',
+            ...(Array.isArray(p?.fallbackModels) && p.fallbackModels.length && { fallbackModels: p.fallbackModels }),
           })),
           // Every approved or reviewable command; the plan review shows them for approval.
           checks: data.checks ?? {},
@@ -581,35 +583,144 @@ async function checkChoices(choices, getLlm) {
   }
 }
 
+function checkOneRoute(route, models, label) {
+  const provider = String(route?.provider ?? '').trim()
+  const model = String(route?.model ?? '').trim()
+  const effort = String(route?.reasoningEffort ?? '').trim()
+  if (!model) {
+    if (provider || effort)
+      return { ok: false, error: new ChoiceError(label + ' sets a provider or reasoning effort without a model') }
+    return { ok: true, route: { provider: '', model: '', reasoningEffort: '', inherited: true } }
+  }
+  const listed = models.providers.filter((p) => !provider || p.id === provider)
+  let foundProvider = null
+  let found = null
+  for (const p of listed) {
+    const match = p.models.find((m) => m.id === model)
+    if (match) {
+      foundProvider = p
+      found = match
+      break
+    }
+  }
+  if (!found) {
+    if (!models.providers.length || (provider ? models.failures.includes(provider) : models.failures.length))
+      return { ok: false, error: new ChoiceError('模型目录暂不可用，无法校验 ' + model + '。请稍后重试。', 503) }
+    return {
+      ok: false,
+      error: new ChoiceError(
+        provider && !listed.length
+          ? 'Unknown provider: ' + provider
+          : 'Unknown model: ' + [provider, model].filter(Boolean).join('/'),
+      ),
+    }
+  }
+  if (effort && !found.efforts.some((e) => e.id === effort)) {
+    return {
+      ok: false,
+      error: new ChoiceError('Model ' + model + ' does not support reasoning effort ' + effort),
+    }
+  }
+  return {
+    ok: true,
+    route: {
+      provider: foundProvider.id,
+      model: found.id,
+      ...(effort && { reasoningEffort: effort }),
+    },
+  }
+}
+
+/**
+ * Resolve and validate the ordered model route chain for one ticket/preset spec.
+ * When fallbackModels are configured, startup-unavailable routes are skipped as
+ * long as at least one route in the chain is available; if every route fails,
+ * the primary error is thrown.
+ */
+export async function resolveRouteChain(spec, getLlm, { label = 'agent', inheritedPrimary = null, models } = {}) {
+  const s = spec ?? {}
+  const fallbacks = Array.isArray(s.fallbackModels) ? s.fallbackModels : []
+  const primaryProvider = String(s.provider ?? '').trim()
+  const primaryModel = String(s.model ?? '').trim()
+  const primaryEffort = String(s.reasoningEffort ?? '').trim()
+  if (!primaryModel && (primaryProvider || primaryEffort)) {
+    throw new ChoiceError(label + ' sets a provider or reasoning effort without a model')
+  }
+  const needsCatalog = Boolean(primaryModel) || fallbacks.some((f) => String(f?.model ?? '').trim())
+  const catalog = models ?? (needsCatalog ? await modelCatalog(getLlm?.()) : { providers: [], failures: [] })
+
+  const routes = []
+  const skipped = []
+  const seen = new Set()
+  let firstError = null
+  const add = (entry) => {
+    const key = routeKey(entry)
+    if (seen.has(key)) return
+    seen.add(key)
+    routes.push(entry)
+  }
+
+  if (!primaryModel) {
+    const inherited = inheritedPrimary?.model
+      ? {
+          ...(inheritedPrimary.provider && { provider: String(inheritedPrimary.provider).trim() }),
+          model: String(inheritedPrimary.model).trim(),
+          ...(inheritedPrimary.reasoningEffort && {
+            reasoningEffort: String(inheritedPrimary.reasoningEffort).trim(),
+          }),
+          inherited: true,
+        }
+      : { provider: '', model: '', reasoningEffort: '', inherited: true }
+    add(inherited)
+  } else {
+    const primaryRes = checkOneRoute(
+      { provider: primaryProvider, model: primaryModel, reasoningEffort: primaryEffort },
+      catalog,
+      label,
+    )
+    if (primaryRes.ok) add(primaryRes.route)
+    else {
+      firstError ??= primaryRes.error
+      skipped.push({
+        provider: primaryProvider,
+        model: primaryModel,
+        ...(primaryEffort && { reasoningEffort: primaryEffort }),
+        reason: primaryRes.error.message,
+      })
+    }
+  }
+
+  for (const [i, fb] of fallbacks.entries()) {
+    const fbRes = checkOneRoute(fb, catalog, `${label}.fallbackModels[${i}]`)
+    if (fbRes.ok && !fbRes.route.inherited) add(fbRes.route)
+    else if (!fbRes.ok) {
+      firstError ??= fbRes.error
+      skipped.push({
+        provider: String(fb?.provider ?? '').trim(),
+        model: String(fb?.model ?? '').trim(),
+        ...(String(fb?.reasoningEffort ?? '').trim() && { reasoningEffort: String(fb.reasoningEffort).trim() }),
+        reason: fbRes.error.message,
+      })
+    }
+  }
+
+  if (!routes.length) throw firstError ?? new ChoiceError('No available model route for ' + label)
+  return { routes, skipped, models: catalog }
+}
+
 // Validate the routes a staged plan will actually dispatch, not only the ones a
 // user typed: a ticket that keeps its planned preset still inherits that
-// preset's provider/model/effort. The coordinator calls this inside its serial
-// region so every effective route resolves before any worker starts.
+// preset's provider/model/effort (and fallbackModels). The coordinator calls this
+// inside its serial region so every effective route resolves before any worker starts.
 export async function validateTicketRoutes(tickets, getLlm) {
   let models
   for (const ticket of tickets) {
     const spec = ticket?.agentSpec ?? {}
-    const provider = String(spec.provider ?? '').trim()
-    const model = String(spec.model ?? '').trim()
-    const effort = String(spec.reasoningEffort ?? '').trim()
-    if (!model) {
-      if (provider || effort) throw new ChoiceError(ticket.id + ' sets a provider or reasoning effort without a model')
-      continue
-    }
-    models ??= await modelCatalog(getLlm?.())
-    const listed = models.providers.filter((p) => !provider || p.id === provider)
-    const found = listed.flatMap((p) => p.models).find((m) => m.id === model)
-    if (!found) {
-      if (!models.providers.length || (provider ? models.failures.includes(provider) : models.failures.length))
-        throw new ChoiceError('模型目录暂不可用，无法校验 ' + model + '。请稍后重试。', 503)
-      throw new ChoiceError(
-        provider && !listed.length
-          ? 'Unknown provider: ' + provider
-          : 'Unknown model: ' + [provider, model].filter(Boolean).join('/'),
-      )
-    }
-    if (effort && !found.efforts.some((e) => e.id === effort))
-      throw new ChoiceError('Model ' + model + ' does not support reasoning effort ' + effort)
+    const hasExplicit =
+      Boolean(String(spec.model ?? '').trim()) ||
+      (Array.isArray(spec.fallbackModels) && spec.fallbackModels.some((f) => String(f?.model ?? '').trim()))
+    if (hasExplicit && !models) models = await modelCatalog(getLlm?.())
+    await resolveRouteChain(spec, getLlm, { label: ticket.id, models })
   }
 }
 

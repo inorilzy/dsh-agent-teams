@@ -66,7 +66,17 @@ async function completed(co, q) {
 }
 
 test('the built-in presets are graded by judgement and name a suggested tier, with no model chosen', () => {
-  assert.deepEqual(Object.keys(builtinAgents), ['architect', 'debugger', 'implementer', 'frontend', 'scribe', 'verifier'])
+  assert.deepEqual(Object.keys(builtinAgents), [
+    'architect',
+    'debugger',
+    'implementer',
+    'frontend',
+    'scribe',
+    'verifier',
+    'explorer',
+    'auditor',
+    'reviewer',
+  ])
   for (const [id, preset] of Object.entries(builtinAgents)) {
     assert.match(preset.description, /建议(高智力|普通|便宜)模型/, id)
     assert.equal(preset.provider + preset.model + preset.reasoningEffort, '', id + ' leaves the route to the user')

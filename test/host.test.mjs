@@ -127,13 +127,24 @@ function harness(extra = {}, { commands, importer } = {}) {
   }
 }
 
-test('nine captain tools bind identity and trusted checks, existing and new root sessions auto-attach', async () => {
+test('ten tools register cleanly, captain tools bind identity and trusted checks, existing and new root sessions auto-attach', async () => {
   const h = harness()
   await afterPublication()
   assert.deepEqual(h.calls, [['attach', { cwd: '/repo', parentId: 'root' }]])
   assert.deepEqual(
     [...h.tools.keys()],
-    ['dag_run', 'dag_status', 'dag_pause', 'dag_resume', 'dag_retry', 'dag_cancel', 'dag_cleanup', 'dag_add', 'dag_import'],
+    [
+      'dag_run',
+      'dag_status',
+      'dag_pause',
+      'dag_resume',
+      'dag_retry',
+      'dag_cancel',
+      'dag_cleanup',
+      'dag_add',
+      'dag_import',
+      'dag_preset_subagent',
+    ],
   )
   await h.invoke('dag_run', {
     manifest: '{"specId":"x"}',
@@ -247,9 +258,10 @@ test('local child launch uses a worktree and caller-delivered completion, drains
     attempt: 1,
   }
   const activation = await h.api.launch(request)
-  assert.equal(received.request.parent, h.root)
-  assert.deepEqual(received.request.prompt, [{ type: 'text', text: request.prompt }])
-  assert.equal(received.request.cwd, request.cwd)
+  assert.equal(Object.hasOwn(received, 'request'), false)
+  assert.equal(received.parent, h.root)
+  assert.deepEqual(received.prompt, [{ type: 'text', text: request.prompt }])
+  assert.equal(received.cwd, request.cwd)
   assert.equal(received.childId, 'task-1')
   assert.equal(received.delivery, 'caller')
   assert.equal(received.provider, 'spawn')
@@ -268,7 +280,17 @@ test('local child launch uses a worktree and caller-delivered completion, drains
 })
 
 test('built-in agent presets are the default; profile presets replace them; a preset model reaches the child', async () => {
-  assert.deepEqual(Object.keys(harness().api.agents), ['architect', 'debugger', 'implementer', 'frontend', 'scribe', 'verifier'])
+  assert.deepEqual(Object.keys(harness().api.agents), [
+    'architect',
+    'debugger',
+    'implementer',
+    'frontend',
+    'scribe',
+    'verifier',
+    'explorer',
+    'auditor',
+    'reviewer',
+  ])
   assert.equal(harness().api.requireApproval, true, 'runs wait for the user by default')
   assert.equal(harness({ requireApproval: false }).api.requireApproval, false)
   const agents = { reviewer: { instructions: 'Review only.', model: 'fast-1', provider: 'acme' } }
@@ -276,7 +298,7 @@ test('built-in agent presets are the default; profile presets replace them; a pr
   assert.deepEqual(h.api.agents, agents)
   const received = []
   h.ctx.subagents.startActivation = async (spec) => {
-    received.push(spec.request)
+    received.push(spec)
     return { childId: spec.childId, result: new Promise(() => {}), dispose: async () => {} }
   }
   const request = {
@@ -290,6 +312,8 @@ test('built-in agent presets are the default; profile presets replace them; a pr
   }
   await h.api.launch({ ...request, childId: 'c1', agentOptions: { provider: 'acme', model: 'fast-1' } })
   await h.api.launch({ ...request, childId: 'c2' })
+  assert.equal(Object.hasOwn(received[0], 'request'), false)
+  assert.equal(Object.hasOwn(received[1], 'request'), false)
   assert.deepEqual(received[0].agentOptions, { provider: 'acme', model: 'fast-1' })
   assert.equal(Object.hasOwn(received[1], 'agentOptions'), false)
   await h.close()

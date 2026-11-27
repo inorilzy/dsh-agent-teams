@@ -162,7 +162,7 @@ function loadHost(seeds, { expanded = false, config = { status: 'loading' }, res
 
 // Editor state order: edit draft, notice, busy, model catalog, expanded preset rows.
 // By default every preset row is seeded open so its fields can be inspected.
-function editorFor(value, catalog, open = new Set([0, 1, 2, 3, 4, 5])) {
+function editorFor(value, catalog, open = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8])) {
   const Panel = loadSlots([null, null, false, catalog, open])['plugins.row.config']
   const form = { state: { status: 'ready', value, writable: true, revision: 1 }, mutate: async () => true }
   return render({ type: Panel, props: { view: 'detail', form }, children: [] })
@@ -761,7 +761,7 @@ test('without saved presets the config page starts from the built-in presets', a
   const values = (label) =>
     findAll(section, (n) => n.props['aria-label'] === label).map((n) => n.props.value)
   assert.deepEqual(values('Agent ID'), Object.keys(builtinAgents))
-  assert.deepEqual(values('显示名'), ['架构', '修复', '实现者', '前端', '文书', '验收员'])
+  assert.deepEqual(values('显示名'), ['架构', '修复', '实现者', '前端', '文书', '验收员', '探索', '审计', '审查'])
   assert.deepEqual(
     values('角色说明'),
     Object.values(builtinAgents).map((a) => a.instructions),
@@ -2486,4 +2486,104 @@ test('train mode: the settings offer B with its train size, and the overview sho
   assert.equal(text(bisect), '列车 3 张 · 验收失败，列车内二分 第 1 步 · slow 1/1')
   assert.equal(text(train({ size: 2, stage: 'publish', index: 1, total: 2 })), '列车 2 张 · 逐张发布 1/2')
   assert.equal(text(train({ size: 2, stage: 'merge' })), '列车 2 张 · 依次合并')
+})
+
+test('preset editor displays, adds, reorders, validates, and saves fallback models', async () => {
+  const value = {
+    agents: {
+      arch: {
+        name: '架构',
+        description: '接口设计',
+        instructions: 'Design.',
+        provider: 'acme',
+        model: 'deep-2',
+        reasoningEffort: 'high',
+        fallbackModels: [
+          { provider: 'acme', model: 'fast-1', reasoningEffort: '' },
+        ],
+        maxConcurrent: 0,
+      },
+    },
+  }
+  const collapsed = editorFor(value, catalog, new Set())
+  const row = find(collapsed, (n) => n.props['data-dag-preset'] === 'arch')
+  assert.match(text(row), /Deep 2 · High → \+1 备选/)
+  const meta = find(row, (n) => n.props.className === 'dtd-preset-meta' && n.props.title)
+  assert.equal(meta.props.title, 'Deep 2 · High → Fast 1')
+
+  const expanded = editorFor(value, catalog, new Set([0]))
+  const fbModel = find(expanded, (n) => n.type === 'select' && n.props['aria-label'] === 'arch 的备选模型 1 的模型')
+  assert.equal(fbModel.props.value, JSON.stringify(['acme', 'fast-1']))
+  assert.equal(text(findAll(fbModel, (n) => n.type === 'option')[0]), '请选择模型…')
+  assert.ok(find(expanded, (n) => n.type === 'button' && text(n) === '添加备选模型'))
+
+  // Saving an empty fallback model row is rejected with a clear message; valid rows persist.
+  const badDraft = {
+    maxWorkers: '16',
+    requireApproval: true,
+    trackerWriteback: 'off',
+    reviewOnComplete: false,
+    integrationMode: 'end',
+    selectChecksByFiles: true,
+    trainSize: '4',
+    checkTimeoutMs: '120000',
+    rules: [],
+    agents: [
+      {
+        id: 'arch',
+        name: '架构',
+        description: '接口设计',
+        instructions: 'Design.',
+        provider: 'acme',
+        model: 'deep-2',
+        reasoningEffort: 'high',
+        fallbackModels: [{ provider: '', model: '', reasoningEffort: '' }],
+        maxConcurrent: '0',
+      },
+    ],
+  }
+  const cfg = { status: 'ready', revision: 5, writable: true, value }
+  const badBase = structuredClone(badDraft)
+  badBase.agents[0].fallbackModels = []
+  const badHost = loadHost([cfg, { revision: 5, base: badBase, draft: badDraft }, null, false, catalog, new Set([0])], {
+    config: cfg,
+  })
+  const badForm = find(badHost.renderSlot('plugins.tab', {}), (n) => n.type === 'form')
+  await badForm.props.onSubmit({ preventDefault() {} })
+  assert.equal(badHost.saved.length, 0)
+  assert.ok(badHost.sets.some((s) => s?.error && /备选模型尚未选择模型/.test(s.text)))
+
+  const goodDraft = structuredClone(badDraft)
+  goodDraft.agents[0].fallbackModels = [{ provider: 'acme', model: 'fast-1', reasoningEffort: '' }]
+  const goodHost = loadHost([cfg, { revision: 5, base: badBase, draft: goodDraft }, null, false, catalog, new Set([0])], {
+    config: cfg,
+  })
+  const goodForm = find(goodHost.renderSlot('plugins.tab', {}), (n) => n.type === 'form')
+  await goodForm.props.onSubmit({ preventDefault() {} })
+  assert.equal(goodHost.saved.length, 1)
+  assert.deepEqual(JSON.parse(JSON.stringify(goodHost.saved[0][0][0].value.arch.fallbackModels)), [
+    { provider: 'acme', model: 'fast-1', reasoningEffort: '' },
+  ])
+})
+
+test('removing one preset shifts expanded indices instead of collapsing all open rows', () => {
+  const value = {
+    agents: {
+      a: { name: 'A', instructions: 'a', provider: '', model: '', reasoningEffort: '', maxConcurrent: 0 },
+      b: { name: 'B', instructions: 'b', provider: '', model: '', reasoningEffort: '', maxConcurrent: 0 },
+      c: { name: 'C', instructions: 'c', provider: '', model: '', reasoningEffort: '', maxConcurrent: 0 },
+    },
+  }
+  const cfg = { status: 'ready', revision: 1, writable: true, value }
+  const host = loadHost([cfg, null, null, false, catalog, new Set([0, 2])], {
+    config: cfg,
+  })
+  const page = host.renderSlot('plugins.tab', {})
+  const rowB = find(page, (n) => n.props['data-dag-preset'] === 'b')
+  const removeBtn = find(rowB, (n) => n.type === 'button' && text(n) === '移除')
+  removeBtn.props.onClick()
+  // Hook 5 is `open` state (after AgentsPage hook 0 + Editor hooks 1..4): removing index 1 keeps 0 and shifts 2 -> 1.
+  const openUpdater = host.indexed.find(([at]) => at === 5)?.[1]
+  assert.equal(typeof openUpdater, 'function')
+  assert.deepEqual([...openUpdater(new Set([0, 2]))], [0, 1])
 })

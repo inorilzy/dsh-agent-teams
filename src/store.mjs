@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { normalizeFallbackModels } from './agents.mjs'
 import { globToRegExp } from './selection.mjs'
 
 /**
@@ -209,6 +210,8 @@ export function agentSpec(registry, name) {
   }
   if ((spec.provider || spec.reasoningEffort) && !spec.model)
     throw new TypeError('agent preset ' + name + ' sets a provider or reasoning effort without a model')
+  const fallbackModels = normalizeFallbackModels(preset.fallbackModels, 'agent preset ' + name)
+  if (fallbackModels.length) spec.fallbackModels = fallbackModels
   return spec
 }
 

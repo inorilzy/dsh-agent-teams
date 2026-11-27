@@ -1,6 +1,6 @@
 {
   "name": "dsh-agent-teams",
-  "version": "0.19.3",
+  "version": "0.21.0",
   "description": "Agent Teams for DeepSeek Harness: local Git worktrees and a dependency-aware rolling ticket scheduler",
   "type": "module",
   "main": "./src/index.mjs",
@@ -23,11 +23,11 @@
       ]
     }
   },
-  "engines": {"node": "^22.19.0 || >=24", "dsh": "0.2.1-rc.2 || 0.2.1-rc.5"},
+  "engines": {"node": "^22.19.0 || >=24", "dsh": ">=0.2.2-rc.2"},
   "peerDependencies": {
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.2 || 0.2.1-rc.5",
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.2 || 0.2.1-rc.5",
-    "@deepseek-ai/schemastery": "3.18.5"
+    "@deepseek-ai/dsh-tools": ">=0.2.2-rc.2",
+    "@deepseek-ai/dsh-llm": ">=0.2.2-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.5"
   },
   "scripts": {"test": "node --test"}
 }

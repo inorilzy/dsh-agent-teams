@@ -847,6 +847,7 @@ export class Coordinator {
             provider: agentSpec?.provider ?? '',
             model: agentSpec?.model ?? '',
             reasoningEffort: agentSpec?.reasoningEffort ?? '',
+            ...(agentSpec?.fallbackModels?.length && { fallbackModels: agentSpec.fallbackModels }),
           },
           livePhase:
             status === 'RUNNING'
@@ -1045,6 +1046,7 @@ export class Coordinator {
           const spec = t.agentSpec.instructions ? { instructions: t.agentSpec.instructions } : {}
           for (const field of ['provider', 'model', 'reasoningEffort'])
             if (chosen.agentSpec?.[field]) spec[field] = chosen.agentSpec[field]
+          if (chosen.agentSpec?.fallbackModels?.length) spec.fallbackModels = chosen.agentSpec.fallbackModels
           t.agentSpec = spec
         }
       }
@@ -1178,6 +1180,7 @@ export class Coordinator {
           const value = String(c[field] ?? '').trim()
           if (value) spec[field] = value
         }
+        if (preset.fallbackModels?.length) spec.fallbackModels = preset.fallbackModels
         requireValue(
           spec.model || !(spec.provider || spec.reasoningEffort),
           t.id + ' sets a provider or reasoning effort without a model',
@@ -1544,6 +1547,7 @@ export class Coordinator {
         cwd: row.path,
         prompt: specPrompt(m, row, upstream),
         agentOptions: agentOptions(row),
+        ...(row.agentSpec?.fallbackModels?.length && { fallbackModels: row.agentSpec.fallbackModels }),
         signal: job.ctrl.signal,
         runId: m.runId,
         ticketId: row.id,
@@ -1602,11 +1606,14 @@ export class Coordinator {
     // ticket approved on the host default froze no route fields (or no
     // agentSpec at all), and the repair then uses the host default too.
     const chosen = approvedTickets(run.db).find((t) => t.agent === repairAgent)
-    if (chosen)
+    if (chosen) {
       for (const field of ['provider', 'model', 'reasoningEffort']) {
         if (chosen.agentSpec?.[field]) spec[field] = chosen.agentSpec[field]
         else delete spec[field]
       }
+      if (chosen.agentSpec?.fallbackModels?.length) spec.fallbackModels = chosen.agentSpec.fallbackModels
+      else delete spec.fallbackModels
+    }
     return { agent: repairAgent, spec }
   }
 

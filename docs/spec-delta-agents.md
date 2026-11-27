@@ -23,7 +23,7 @@ PRD 把“运行前在看板上审批清单”和“按工单切换模型”列�
 ## 派工
 
 - `agentSpec.instructions` 以 `Role (<id>): <instructions>` 一段写入 worker 提示词，位于工单标题之后、`prompt` 之前。
-- `agentSpec.model` 非空时，`launch` 收到 `agentOptions: { provider?, model, reasoningEffort? }`，宿主适配器把它放进 `startActivation` 的 `request.agentOptions`；否则不传该字段。
+- `agentSpec.model` 非空时，`launch` 收到 `agentOptions: { provider?, model, reasoningEffort? }`，宿主适配器把它放进 `startActivation` 的顶层 `agentOptions`；否则不传该字段。
 - 派工时，若工单的 `agent` 在当前（实时）配置中有 `maxConcurrent > 0`，且该协调器所有运行中使用这个预设的在途 worker 数已达上限，就跳过这张工单、继续检查后面的就绪工单。上限不冻结进清单；配置更新会唤醒所有运行重新派工，已在运行的 worker 不受影响。预设从配置中删除后只剩全局与单轮上限。
 
 ## 插件页

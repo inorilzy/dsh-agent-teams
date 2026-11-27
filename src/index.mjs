@@ -1,11 +1,20 @@
+import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { isAbsolute, resolve } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { builtinAgents } from './agents.mjs'
+import { builtinAgents, formatRoute, routeChainOf } from './agents.mjs'
 import { Coordinator } from './coordinator.mjs'
-import { RunCatalog, mountApproval, mountDashboard, mountModels, validateTicketRoutes } from './dashboard.mjs'
+import {
+  RunCatalog,
+  mountApproval,
+  mountDashboard,
+  mountModels,
+  resolveRouteChain,
+  validateTicketRoutes,
+} from './dashboard.mjs'
+import { ModelFallbackController } from './fallback.mjs'
 import { importTickets, mergeImportedManifest, writeback } from './tracker.mjs'
 
 export const name = 'dsh-agent-teams'
@@ -33,6 +42,15 @@ export const Config = z.object({
         provider: z.string().default(''),
         model: z.string().default(''),
         reasoningEffort: z.string().default(''),
+        fallbackModels: z
+          .array(
+            z.object({
+              provider: z.string().default(''),
+              model: z.string().default(''),
+              reasoningEffort: z.string().default(''),
+            }),
+          )
+          .default([]),
         maxConcurrent: z.natural().max(32).default(0),
       }),
     )
@@ -142,6 +160,24 @@ const presetUse = {
   scribe: 'for docs, comments, config and the mechanical ticket that registers upstream modules in a shared file',
   debugger: 'for bug fixes and failing checks, which automatic fix tickets also use',
   verifier: 'for acceptance on real hosts, browsers or SDKs',
+  explorer: 'for read-only codebase search and external documentation lookups',
+  auditor: 'for read-only security, permission, concurrency and data-integrity audits',
+  reviewer: 'for read-only code review of correctness, edge cases and spec alignment',
+}
+
+const subagentNamePattern = /^[a-z][a-z0-9-]{0,31}$/
+
+function presetSummaryLines(agents) {
+  return Object.entries(agents ?? {}).map(([id, spec]) => {
+    const display = String(spec?.name ?? '').trim()
+    const primary = formatRoute(spec)
+    const fallbacks = Array.isArray(spec?.fallbackModels)
+      ? spec.fallbackModels.filter((f) => String(f?.model ?? '').trim()).map(formatRoute)
+      : []
+    const route = fallbacks.length ? [primary, ...fallbacks].join(' -> ') : primary
+    const desc = String(spec?.description ?? '').trim()
+    return `- ${id}${display ? ' (' + display + ')' : ''} [${route}]${desc ? ': ' + desc : ''}`
+  })
 }
 
 export function captainSection({
@@ -155,6 +191,7 @@ export function captainSection({
   selectChecksByFiles,
 }) {
   const presets = Object.keys(agents ?? {})
+  const presetLines = presetSummaryLines(agents)
   const uses = presets.filter((id) => Object.hasOwn(presetUse, id)).map((id) => id + ' ' + presetUse[id])
   const limits =
     'Give each ticket the preset that matches how much judgement it needs, not one preset for every ticket' +
@@ -170,6 +207,8 @@ export function captainSection({
   return [
     'dsh-agent-teams is this profile’s Agent Teams plugin: it runs a coding goal as a DAG of tickets, one worker per ticket in its own git worktree, verified and merged into an integration branch.',
     'A user message that starts with /dag or contains "Agent Teams" (any case, also agent team or AgentTeams) always activates it, and the host then adds a directive for that step. Otherwise use it only when the user explicitly asks for it (teams, 工单团队, ticket DAG) and the work splits into two or more tickets; mentioning, discussing or declining it is not a request, and a single small change is done directly, without dag_run.',
+    'Default delegation rule: whenever delegating a fresh, self-contained sub-task (one or a few independent sub-tasks that do not need multi-ticket dependencies, isolated git worktrees, or automated integration checks), prefer dag_preset_subagent over the generic subagent tool so the child runs with a configured agent preset and its bound LLM route (completion notifications and send_message / list_agents work through the host subagent tree). Use subagent_fork only when the child genuinely needs this conversation’s completed turns as inherited context (fork always keeps the parent model and cannot switch presets). Use the generic subagent tool only when no configured preset fits or the user explicitly asks for an unpreset subagent. Reserve dag_run for multi-ticket DAG orchestration.' +
+      (presetLines.length ? '\nCurrent agent presets:\n' + presetLines.join('\n') : ''),
     'As captain: read the code first, split the goal into tickets with id, title, a self-contained prompt, depends_on for genuine prerequisites, acceptance, verify and agent' +
       (presets.length ? ' (presets: ' + presets.join(', ') + ')' : '') +
       ', then call dag_run in the current repository. ' +
@@ -183,7 +222,7 @@ export function captainSection({
     reviewOnComplete === true
       ? 'This profile reviews each run once: the first completion notice asks you to run code-review on the integration branch and add fixes with dag_add. Follow it; do not review again after the fixes land.'
       : '',
-    'Only the top-level captain may use dag_* tools. Keep the runId. When dag_run returns mode staged, tell the user to review and approve the plan in the 「工单 · <runId>」 tab of the right sidebar, then end the turn; after starting, end the turn when only waiting remains. The host schedules work and notifies you. Use dag_status for inspection, dag_resume after a host restart, and dag_retry only after addressing the specified ticket blocker. dag_cleanup removes the worktrees and branches of integrated tickets in a run. dag_add appends tickets to a run: they need no user approval, may use profile checks or the checks already in the run manifest, and cannot add new commands. Workers complete their own assignment and leave orchestration to the captain.',
+    'Only the top-level captain may use dag_* run-control tools (dag_run, dag_status, dag_pause, dag_resume, dag_retry, dag_cancel, dag_cleanup, dag_add, dag_import). Keep the runId. When dag_run returns mode staged, tell the user to review and approve the plan in the 「工单 · <runId>」 tab of the right sidebar, then end the turn; after starting, end the turn when only waiting remains. The host schedules work and notifies you. Use dag_status for inspection, dag_resume after a host restart, and dag_retry only after addressing the specified ticket blocker. dag_cleanup removes the worktrees and branches of integrated tickets in a run. dag_add appends tickets to a run: they need no user approval, may use profile checks or the checks already in the run manifest, and cannot add new commands. Workers complete their own assignment and leave orchestration to the captain.',
   ]
     .filter(Boolean)
     .join('\n')
@@ -268,6 +307,19 @@ export function apply(ctx, config = {}, { importer = importTickets, reporter = w
   const live = new Map()
   const notifying = new Map()
   let closing = false
+  const fallbacks = new ModelFallbackController({
+    createUserMessage,
+    isLive: (agent) => !closing && Boolean(agent?.id) && ctx.agents.get(agent.id) === agent,
+    logger: ctx.logger,
+  })
+  ctx.on('agent/request-error', async (payload, next) => {
+    const decision = await next()
+    if (decision?.kind !== 'retry') fallbacks.onRequestError(payload)
+    return decision
+  })
+  ctx.on('agent/error', (payload) => fallbacks.onError(payload))
+  ctx.on('agent/status', (payload) => fallbacks.onStatus(payload))
+  ctx.on('agent/disposed', ({ agent }) => fallbacks.unregister(agent?.id))
 
   async function captain(parentId) {
     if (closing) throw new Error('DAG plugin is stopping')
@@ -282,19 +334,68 @@ export function apply(ctx, config = {}, { importer = importTickets, reporter = w
     return agent
   }
 
-  async function launch({ parentId, childId, cwd, prompt, agentOptions, signal, runId, ticketId, attempt }) {
+  async function launch({ parentId, childId, cwd, prompt, agentOptions, fallbackModels, signal, runId, ticketId, attempt }) {
     if (!isAbsolute(cwd)) throw new Error('Worker worktree path must be absolute')
     const parent = await captain(parentId)
     signal.throwIfAborted()
-    const activation = await ctx.subagents.startActivation({
-      provider: 'spawn',
-      label: childLabel + runId + '/' + ticketId + '#' + attempt,
-      childId,
-      request: { parent, cwd, prompt: [{ type: 'text', text: prompt }], ...(agentOptions && { agentOptions }) },
-      signal,
-      delivery: 'caller',
-    })
+    let launchOptions = agentOptions
+    let runtimeRoutes = []
+    if (Array.isArray(fallbackModels) && fallbackModels.length) {
+      const spec = {
+        provider: agentOptions?.provider ?? '',
+        model: agentOptions?.model ?? '',
+        reasoningEffort: agentOptions?.reasoningEffort ?? '',
+        fallbackModels,
+      }
+      const llm = ctx.get('llm')
+      if (llm) {
+        const resolved = await resolveRouteChain(spec, () => llm, {
+          label: `${runId}/${ticketId}`,
+          inheritedPrimary: parent.options,
+        })
+        runtimeRoutes = resolved.routes
+        const first = runtimeRoutes[0]
+        launchOptions =
+          first && !first.inherited && first.model
+            ? {
+                ...(first.provider && { provider: first.provider }),
+                model: first.model,
+                ...(first.reasoningEffort && { reasoningEffort: first.reasoningEffort }),
+              }
+            : undefined
+        if (resolved.skipped.length) {
+          ctx.logger?.warn?.(
+            `dsh-agent-teams: skipped unavailable model route(s) for ${runId}/${ticketId}: ` +
+              resolved.skipped.map((s) => formatRoute(s) + ' (' + s.reason + ')').join(', '),
+          )
+        }
+      } else {
+        runtimeRoutes = routeChainOf(spec, parent.options)
+      }
+    }
+    const label = childLabel + runId + '/' + ticketId + '#' + attempt
+    if (runtimeRoutes.length > 1) {
+      fallbacks.register(childId, { routes: runtimeRoutes, initialPromptText: prompt, label })
+    }
+    let activation
+    try {
+      activation = await ctx.subagents.startActivation({
+        provider: 'spawn',
+        label,
+        childId,
+        parent,
+        cwd,
+        prompt: [{ type: 'text', text: prompt }],
+        ...(launchOptions && { agentOptions: launchOptions }),
+        signal,
+        delivery: 'caller',
+      })
+    } catch (error) {
+      fallbacks.unregister(childId)
+      throw error
+    }
     if (activation.childId !== childId) {
+      fallbacks.unregister(childId)
       await activation.dispose()
       throw new Error('Harness returned an unexpected child ID')
     }
@@ -312,7 +413,10 @@ export function apply(ctx, config = {}, { importer = importTickets, reporter = w
           : value.stopReason + (value.diagnostic ? ' — ' + value.diagnostic : '')
         return { ok, detail: detail.slice(0, detailLimit) }
       })
-      .finally(() => live.delete(childId))
+      .finally(() => {
+        live.delete(childId)
+        fallbacks.unregister(childId)
+      })
     return { childId, result, dispose }
   }
 
@@ -603,6 +707,219 @@ export function apply(ctx, config = {}, { importer = importTickets, reporter = w
         if (closing) throw new Error('DAG plugin is stopping')
         const cwd = await ctx.workingDirectory.ensure(agent, exec.signal)
         return JSON.parse(JSON.stringify(await importer({ cwd, spec: args.spec, repo: args.repo })))
+      },
+    }),
+  )
+  const initialPresetLines = presetSummaryLines(settings().agents)
+  ctx.tools.register(
+    defineTool({
+      name: 'dag_preset_subagent',
+      description:
+        'Preferred tool for delegating fresh, self-contained sub-tasks using one of the configured Agent Teams presets (combining its role instructions and bound LLM route without creating a DAG run or git worktree). Prefer this over the generic subagent tool whenever a configured preset fits; use subagent_fork only when the child must inherit this conversation’s completed turns. Returns immediately with the child name, id, and effective route; completion is delivered automatically through the host subagent tree, and you can use list_agents, send_message, or interrupt_agent for follow-up. Omit provider, model, and reasoning_effort to use the preset route (or inherit the parent route if the preset sets no model). Supply provider and model together (plus optional reasoning_effort) to override the preset route for this single call.' +
+        (initialPresetLines.length ? '\nAvailable presets:\n' + initialPresetLines.join('\n') : ''),
+      parameters: {
+        preset: {
+          type: 'string',
+          required: true,
+          description:
+            'Configured agent preset ID (for example explorer, architect, debugger, implementer, frontend, scribe, verifier, auditor, reviewer, or a custom preset ID).',
+        },
+        description: {
+          type: 'string',
+          required: true,
+          description: 'A short (3-5 word) description of the delegated task, shown in the session label.',
+        },
+        prompt: {
+          type: 'string',
+          required: true,
+          description: 'Complete, self-contained task instructions for the subagent.',
+        },
+        cwd: {
+          type: 'string',
+          description: 'Optional initial working directory (relative to the parent cwd or absolute). Omit to inherit.',
+        },
+        name: {
+          type: 'string',
+          description:
+            'Optional short name for the subagent: 1-32 lower-case letters, digits, or hyphens, starting with a letter, and not "lead".',
+        },
+        provider: {
+          type: 'string',
+          description: 'Optional one-off LLM provider ID override; must be supplied together with model.',
+        },
+        model: {
+          type: 'string',
+          description: 'Optional one-off LLM model ID override; must be supplied together with provider.',
+        },
+        reasoning_effort: {
+          type: 'string',
+          description:
+            'Optional one-off reasoning effort override; requires both provider and model. Omit when overriding to use the selected model default.',
+        },
+      },
+      output,
+      isConcurrencySafe: () => true,
+      async execute(args, exec) {
+        if (closing) throw new Error('Agent Teams plugin is stopping')
+        const parent = exec.agent
+        if (!parent) throw new Error('Requires a live calling agent')
+
+        const presetId = typeof args.preset === 'string' ? args.preset.trim() : ''
+        const current = settings()
+        const agents = current.agents ?? {}
+        const spec = presetId && Object.hasOwn(agents, presetId) ? agents[presetId] : undefined
+        if (!spec) {
+          const available = Object.keys(agents)
+          const byName = presetId
+            ? available.find((id) => String(agents[id]?.name ?? '').trim() === presetId)
+            : undefined
+          const hint = byName ? ` Did you mean preset ID "${byName}"?` : ''
+          throw new Error(
+            `Unknown agent preset "${String(args.preset ?? '')}". Available: ${available.join(', ') || '(none)'}.${hint}`,
+          )
+        }
+
+        const prompt = typeof args.prompt === 'string' ? args.prompt : ''
+        if (!prompt.trim()) throw new Error('Prompt must be a non-empty string')
+        const desc = typeof args.description === 'string' ? args.description.trim() : ''
+        if (!desc) throw new Error('Description must be a non-empty string')
+        if (args.name !== undefined) {
+          if (typeof args.name !== 'string' || args.name === 'lead' || !subagentNamePattern.test(args.name)) {
+            throw new Error(
+              'Subagent name must be 1-32 lower-case letters, digits, or hyphens, starting with a letter, and cannot be "lead"',
+            )
+          }
+        }
+        if (args.cwd !== undefined && (typeof args.cwd !== 'string' || !args.cwd.trim())) {
+          throw new Error('Subagent cwd must be a non-empty path')
+        }
+
+        const hasOverride =
+          args.provider !== undefined || args.model !== undefined || args.reasoning_effort !== undefined
+        let provider, model, reasoningEffort
+        if (hasOverride) {
+          for (const [field, value] of [
+            ['provider', args.provider],
+            ['model', args.model],
+            ['reasoning_effort', args.reasoning_effort],
+          ]) {
+            if (value !== undefined && (typeof value !== 'string' || !value.trim())) {
+              throw new Error(`Override \`${field}\` must be a non-empty string`)
+            }
+          }
+          const overrideProvider = args.provider?.trim() ?? ''
+          const overrideModel = args.model?.trim() ?? ''
+          const overrideEffort = args.reasoning_effort?.trim() ?? ''
+          if (!overrideProvider || !overrideModel) {
+            throw new Error(
+              overrideEffort
+                ? 'Override `reasoning_effort` requires both `provider` and `model`'
+                : 'Override `provider` and `model` must be supplied together',
+            )
+          }
+          provider = overrideProvider
+          model = overrideModel
+          reasoningEffort = overrideEffort
+        } else {
+          provider = String(spec.provider ?? '').trim()
+          model = String(spec.model ?? '').trim()
+          reasoningEffort = String(spec.reasoningEffort ?? '').trim()
+        }
+
+        const routeSpec = hasOverride
+          ? { provider, model, reasoningEffort }
+          : {
+              provider,
+              model,
+              reasoningEffort,
+              ...(Array.isArray(spec.fallbackModels) && spec.fallbackModels.length && {
+                fallbackModels: spec.fallbackModels,
+              }),
+            }
+        const resolved = await resolveRouteChain(routeSpec, () => ctx.get('llm'), {
+          label: presetId,
+          inheritedPrimary: hasOverride ? null : parent.options,
+        })
+        const runtimeRoutes = resolved.routes
+        const first = runtimeRoutes[0]
+        const agentOptions =
+          first && !first.inherited && first.model
+            ? {
+                ...(first.provider && { provider: first.provider }),
+                model: first.model,
+                ...(first.reasoningEffort && { reasoningEffort: first.reasoningEffort }),
+              }
+            : undefined
+        if (resolved.skipped.length) {
+          ctx.logger?.warn?.(
+            `dsh-agent-teams: skipped unavailable model route(s) for ${presetId}: ` +
+              resolved.skipped.map((s) => formatRoute(s) + ' (' + s.reason + ')').join(', '),
+          )
+        }
+
+        exec.signal?.throwIfAborted?.()
+
+        const instructions = String(spec.instructions ?? '').trim()
+        const text = instructions ? `Role (${presetId}): ${instructions}\n\nTask:\n${prompt}` : prompt
+        const effectiveRoute =
+          first && !first.inherited && first.model
+            ? {
+                ...(first.provider && { provider: first.provider }),
+                model: first.model,
+                ...(first.reasoningEffort && { reasoningEffort: first.reasoningEffort }),
+                inherited: false,
+              }
+            : {
+                ...(parent.options?.provider && { provider: parent.options.provider }),
+                ...(parent.options?.model && { model: parent.options.model }),
+                ...(parent.options?.reasoningEffort && { reasoningEffort: parent.options.reasoningEffort }),
+                inherited: true,
+              }
+        const badge = effectiveRoute.model
+          ? ` [${[effectiveRoute.model, effectiveRoute.reasoningEffort].filter(Boolean).join(' · ')}]`
+          : ''
+        const label = `${presetId}${badge} · ${desc}`
+
+        const reservedId = runtimeRoutes.length > 1 ? randomUUID() : undefined
+        if (reservedId) {
+          fallbacks.register(reservedId, { routes: runtimeRoutes, initialPromptText: text, label })
+        }
+        let started
+        try {
+          started = await ctx.subagents.startActivation({
+            provider: 'spawn',
+            label,
+            ...(reservedId !== undefined && { childId: reservedId }),
+            ...(args.name !== undefined && { name: args.name }),
+            parent,
+            ...(args.cwd !== undefined && { cwd: args.cwd.trim() }),
+            prompt: [{ type: 'text', text }],
+            ...(agentOptions && { agentOptions }),
+            maxDepth: 1,
+            signal: exec.signal,
+            delivery: 'parent',
+          })
+        } catch (error) {
+          if (reservedId) fallbacks.unregister(reservedId)
+          throw error
+        }
+        if (reservedId) {
+          if (started.childId !== reservedId) fallbacks.rekey(reservedId, started.childId)
+          void Promise.resolve(started.result)
+            .catch(() => undefined)
+            .finally(() => fallbacks.unregister(started.childId))
+        }
+        const skippedPrimary = !hasOverride && Boolean(model) && resolved.skipped.some((s) => s.model === model)
+        return {
+          kind: 'activation',
+          preset: presetId,
+          name: started.name,
+          subagentId: started.childId,
+          ...effectiveRoute,
+          ...(runtimeRoutes.length > 1 && { fallbackCount: runtimeRoutes.length - 1 }),
+          ...(skippedPrimary && { fallbackFrom: formatRoute({ provider, model, reasoningEffort }) }),
+          ...(hasOverride && { overridden: true }),
+        }
       },
     }),
   )
